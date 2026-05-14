@@ -1,0 +1,115 @@
+import * as path from 'path';
+import { workspace, ExtensionContext, commands, window } from 'vscode';
+import {
+  LanguageClient,
+  LanguageClientOptions,
+  ServerOptions,
+  TransportKind
+} from 'vscode-languageclient/node';
+
+let client: LanguageClient;
+
+export function activate(context: ExtensionContext) {
+  // The server is implemented in node
+  const serverModule = context.asAbsolutePath(
+    path.join('out', 'server', 'src', 'server.js')
+  );
+
+  // If the extension is launched in debug mode then the debug server options are used
+  // Otherwise the run options are used
+  const serverOptions: ServerOptions = {
+    run: { module: serverModule, transport: TransportKind.ipc },
+    debug: {
+      module: serverModule,
+      transport: TransportKind.ipc,
+      options: { execArgv: ['--nolazy', '--inspect=6009'] }
+    }
+  };
+
+  // Options to control the language client
+  const clientOptions: LanguageClientOptions = {
+    // Register the server for htl and html documents
+    documentSelector: [{ scheme: 'file', language: 'htl' }, { scheme: 'file', language: 'html' }],
+    synchronize: {
+      // Notify the server about file changes to '.clientrc files contained in the workspace
+      fileEvents: workspace.createFileSystemWatcher('**/.clientrc')
+    }
+  };
+
+  // Create the language client and start the client.
+  client = new LanguageClient(
+    'aemToolsServer',
+    'AEM Tools Language Server',
+    serverOptions,
+    clientOptions
+  );
+
+  // Handle custom request from server
+  client.onRequest('aem/findClassFile', async (params: { className: string }) => {
+    const files = await workspace.findFiles(`**/core/src/main/java/**/${params.className}.java`, '**/node_modules/**', 1);
+    if (files && files.length > 0) {
+      return files[0].toString();
+    }
+    return null;
+  });
+
+  // Start the client. This will also launch the server
+  client.start();
+
+  // Register AEM sync commands
+  const syncToAemCmd = commands.registerCommand('aem-tools.syncToAEM', async (uri) => {
+    try {
+      import('vscode').then(async vscode => {
+        const targetUri = uri || vscode.window.activeTextEditor?.document.uri;
+        if (!targetUri) {
+          vscode.window.showErrorMessage('No file selected to sync to AEM.');
+          return;
+        }
+
+        const config = vscode.workspace.getConfiguration('aemTools');
+        const host = config.get<string>('host');
+        const username = config.get<string>('username');
+        const password = config.get<string>('password');
+        
+        let targetUrl = host || 'http://localhost:4502';
+        if (username && password && targetUrl.includes('://')) {
+          const parts = targetUrl.split('://');
+          targetUrl = `${parts[0]}://${username}:${password}@${parts[1]}`;
+        }
+
+        vscode.window.showInformationMessage(`Syncing ${path.basename(targetUri.fsPath)} to AEM...`);
+        
+        // Dynamically import ESM module
+        const aemsync = await Function('return import("aemsync")')();
+        
+        const pushGen = aemsync.push({
+          payload: [targetUri.fsPath],
+          targets: [targetUrl]
+        });
+
+        for await (const result of pushGen) {
+          if (result.response?.err) {
+            vscode.window.showErrorMessage(`AEM Sync Error: ${result.response.err.message}`);
+          } else {
+            vscode.window.showInformationMessage(`Successfully synced ${path.basename(targetUri.fsPath)} to AEM.`);
+          }
+        }
+      });
+    } catch (err: any) {
+      window.showErrorMessage(`AEM Sync failed: ${err.message}`);
+    }
+  });
+  
+  const syncFromAemCmd = commands.registerCommand('aem-tools.syncFromAEM', () => {
+    window.showInformationMessage('Sync from AEM not yet implemented.');
+  });
+
+  context.subscriptions.push(syncToAemCmd, syncFromAemCmd);
+}
+
+export function deactivate(): Thenable<void> | undefined {
+  if (!client) {
+    return undefined;
+  }
+  return client.stop();
+}

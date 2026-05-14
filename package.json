@@ -1,0 +1,101 @@
+{
+  "name": "vscode-aem-tools",
+  "displayName": "AEM Tools",
+  "description": "Code-assist features for Adobe Experience Manager development (HTL, JCR Sync)",
+  "version": "0.0.1",
+  "publisher": "your-publisher-name",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Snippets",
+    "Linters"
+  ],
+  "activationEvents": [
+    "onLanguage:html",
+    "onLanguage:xml",
+    "workspaceContains:jcr_root"
+  ],
+  "main": "./out/client/src/extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "htl",
+        "aliases": [
+          "HTL",
+          "Sightly"
+        ],
+        "extensions": [
+          ".html"
+        ]
+      }
+    ],
+    "commands": [
+      {
+        "command": "aem-tools.syncToAEM",
+        "title": "AEM: Sync to Server",
+        "category": "AEM"
+      },
+      {
+        "command": "aem-tools.syncFromAEM",
+        "title": "AEM: Sync from Server",
+        "category": "AEM"
+      }
+    ],
+    "menus": {
+      "explorer/context": [
+        {
+          "command": "aem-tools.syncToAEM",
+          "group": "aem-tools"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "aem-tools.syncToAEM",
+          "group": "aem-tools"
+        }
+      ]
+    },
+    "configuration": {
+      "type": "object",
+      "title": "AEM Tools Configuration",
+      "properties": {
+        "aemTools.host": {
+          "type": "string",
+          "default": "http://localhost:4502",
+          "description": "The URL of the target AEM instance."
+        },
+        "aemTools.username": {
+          "type": "string",
+          "default": "admin",
+          "description": "AEM Username."
+        },
+        "aemTools.password": {
+          "type": "string",
+          "default": "admin",
+          "description": "AEM Password."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc",
+    "watch": "tsc -w"
+  },
+  "devDependencies": {
+    "@types/htmlparser2": "^3.10.7",
+    "@types/node": "18.x",
+    "@types/vscode": "^1.80.0",
+    "typescript": "^5.0.4"
+  },
+  "dependencies": {
+    "@adobe/htlengine": "^6.4.39",
+    "aemsync": "^5.2.3",
+    "htmlparser2": "^12.0.0",
+    "vscode-languageclient": "^8.1.0",
+    "vscode-languageserver": "^8.1.0",
+    "vscode-languageserver-textdocument": "^1.0.8"
+  }
+}
