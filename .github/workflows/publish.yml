@@ -18,14 +18,14 @@ jobs:
         run: npm ci
         
       - name: Build and Package Extension
-        run: npx vsce package
+        run: npx @vscode/vsce package -o vscode-aem-tools.vsix
         
       - name: Publish to VS Code Marketplace
-        run: npx vsce publish --no-dependencies
+        run: npx @vscode/vsce publish -i vscode-aem-tools.vsix
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
           
       - name: Publish to Open VSX Registry
-        run: npx ovsx publish --no-dependencies
+        run: npx ovsx publish vscode-aem-tools.vsix
         env:
           OVSX_PAT: ${{ secrets.OVSX_PAT }}

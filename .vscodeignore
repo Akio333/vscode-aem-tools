@@ -1,0 +1,11 @@
+.git
+.github/**
+.vscode/**
+.gitignore
+client/src/**
+server/src/**
+tsconfig.json
+scratch/**
+scratch.js
+scratch2.js
+*.vsix
