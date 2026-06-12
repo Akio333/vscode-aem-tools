@@ -5,6 +5,7 @@
   "version": "0.1.0",
   "publisher": "akio333",
   "license": "GPL-3.0-only",
+  "icon": "icon.png",
   "repository": {
     "url": "https://github.com/akio333/vscode-aem-tools"
   },
