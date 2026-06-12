@@ -98,15 +98,17 @@
     }
   },
   "scripts": {
-    "vscode:prepublish": "npm run compile",
-    "compile": "tsc",
-    "watch": "tsc -w",
+    "vscode:prepublish": "node esbuild.js --minify",
+    "compile": "node esbuild.js",
+    "watch": "node esbuild.js --watch",
+    "check-types": "tsc --noEmit",
     "package": "npx @vscode/vsce package"
   },
   "devDependencies": {
     "@types/htmlparser2": "^3.10.7",
     "@types/node": "18.x",
     "@types/vscode": "^1.80.0",
+    "esbuild": "^0.28.1",
     "typescript": "^5.0.4"
   },
   "dependencies": {

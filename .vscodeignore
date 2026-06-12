@@ -9,3 +9,6 @@ scratch/**
 scratch.js
 scratch2.js
 *.vsix
+node_modules/**
+esbuild.js
+.DS_Store
