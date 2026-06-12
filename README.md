@@ -6,6 +6,40 @@ AEM Tools is a lightweight, feature-rich Visual Studio Code extension designed t
 
 ---
 
+## Installation
+
+You can install AEM Tools from the official marketplace registries:
+
+[![Visual Studio Marketplace](https://img.shields.io/badge/VS%20Marketplace-Download-007acc?style=for-the-badge&logo=visual-studio-code)](https://marketplace.visualstudio.com/items?itemName=Akio333.vscode-aem-tools)
+[![Open VSX](https://img.shields.io/open-vsx/v/Akio333/vscode-aem-tools?label=Open%20VSX&style=for-the-badge&logo=open-vsx&color=f05023)](https://open-vsx.org/extension/Akio333/vscode-aem-tools)
+
+### Latest Release VSIX
+Alternatively, download the latest compiled `.vsix` file directly from the [GitHub Releases Page](https://github.com/akio333/vscode-aem-tools/releases/latest) and install it manually in VS Code via **Extensions: Install from VSIX...**.
+
+### Build from Source
+If you prefer to build the extension manually from source, follow these steps:
+
+1. Clone this repository:
+   ```bash
+   git clone https://github.com/akio333/vscode-aem-tools.git
+   cd vscode-aem-tools
+   ```
+2. Install the dependencies:
+   ```bash
+   npm install
+   ```
+3. Compile and bundle the project:
+   ```bash
+   npm run compile
+   ```
+4. Package the extension into a `.vsix` file:
+   ```bash
+   npm run package
+   ```
+5. Install the generated `vscode-aem-tools-<version>.vsix` file in VS Code.
+
+---
+
 ## Features
 
 ### 1. JCR Synchronization (Push & Pull)
