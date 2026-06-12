@@ -2,8 +2,11 @@
   "name": "vscode-aem-tools",
   "displayName": "AEM Tools",
   "description": "Code-assist features for Adobe Experience Manager development (HTL, JCR Sync)",
-  "version": "0.0.1",
-  "publisher": "your-publisher-name",
+  "version": "0.1.0",
+  "publisher": "akio333",
+  "repository": {
+    "url": "https://github.com/akio333/vscode-aem-tools"
+  },
   "engines": {
     "vscode": "^1.80.0"
   },
@@ -95,7 +98,8 @@
   "scripts": {
     "vscode:prepublish": "npm run compile",
     "compile": "tsc",
-    "watch": "tsc -w"
+    "watch": "tsc -w",
+    "package": "npx @vscode/vsce package"
   },
   "devDependencies": {
     "@types/htmlparser2": "^3.10.7",
