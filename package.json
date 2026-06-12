@@ -4,6 +4,7 @@
   "description": "Code-assist features for Adobe Experience Manager development (HTL, JCR Sync)",
   "version": "0.1.0",
   "publisher": "akio333",
+  "license": "GPL-3.0-only",
   "repository": {
     "url": "https://github.com/akio333/vscode-aem-tools"
   },
