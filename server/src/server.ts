@@ -12,6 +12,9 @@ import {
   TextDocumentSyncKind,
   InitializeResult
 } from 'vscode-languageserver/node';
+import * as path from 'path';
+import * as fs from 'fs/promises';
+import { fileURLToPath } from 'url';
 
 import {
   TextDocument
@@ -78,6 +81,7 @@ async function validateTextDocument(textDocument: TextDocument): Promise<void> {
   const text = textDocument.getText();
   const diagnostics: Diagnostic[] = [];
 
+  // 1. Basic HTML/HTL expression attribute validation (using htmlparser2)
   const parser = new Parser({
     onattribute(name: string, value: string) {
       if (name.startsWith('data-sly-')) {
@@ -86,11 +90,10 @@ async function validateTextDocument(textDocument: TextDocument): Promise<void> {
         const closeBraces = (value.match(/\}/g) || []).length;
         
         if (openBraces !== closeBraces) {
-          // Approximate the location for now
           const index = text.indexOf(value);
           if (index !== -1) {
             const diagnostic: Diagnostic = {
-              severity: DiagnosticSeverity.Error,
+              severity: DiagnosticSeverity.Warning,
               range: {
                 start: textDocument.positionAt(index),
                 end: textDocument.positionAt(index + value.length)
@@ -107,6 +110,51 @@ async function validateTextDocument(textDocument: TextDocument): Promise<void> {
 
   parser.write(text);
   parser.end();
+
+  // 2. Full HTL syntax and compile-time validation (using @adobe/htlengine)
+  try {
+    const { Compiler } = require('@adobe/htlengine');
+    const compiler = new Compiler()
+      .withDirectory('.')
+      .includeRuntime(true)
+      .withRuntimeVar(Object.keys({}))
+      .withRuntimeGlobalName('global');
+
+    await compiler.compileToString(text);
+  } catch (err: any) {
+    if (err && err.token) {
+      // The error contains detailed token locations (1-indexed)
+      const line = (err.token.line || 1) - 1;
+      const col = (err.token.col || 1) - 1;
+      
+      // Calculate token length or default to 1 character
+      const tokenVal = err.token.value || '';
+      const length = tokenVal.length || 1;
+
+      const diagnostic: Diagnostic = {
+        severity: DiagnosticSeverity.Error,
+        range: {
+          start: { line: line, character: col },
+          end: { line: line, character: col + length }
+        },
+        message: err.message || 'HTL compilation error',
+        source: 'aem-tools-compiler'
+      };
+      diagnostics.push(diagnostic);
+    } else if (err && err.message) {
+      // General error without token location info
+      const diagnostic: Diagnostic = {
+        severity: DiagnosticSeverity.Error,
+        range: {
+          start: { line: 0, character: 0 },
+          end: { line: 0, character: 0 }
+        },
+        message: err.message,
+        source: 'aem-tools-compiler'
+      };
+      diagnostics.push(diagnostic);
+    }
+  }
 
   connection.sendDiagnostics({ uri: textDocument.uri, diagnostics });
 }
@@ -150,8 +198,97 @@ const HTL_OPTIONS: CompletionItem[] = [
   'locale', 'hint', 'basename', 'format', 'timezone', 'join', 'type'
 ].map(v => ({ label: v, kind: CompletionItemKind.Field }));
 
+const HTL_CONTEXTS: CompletionItem[] = [
+  'html', 'text', 'elementName', 'attributeName', 'attribute',
+  'uri', 'scriptToken', 'scriptString', 'scriptComment',
+  'styleToken', 'styleString', 'unsafe'
+].map(v => ({
+  label: v,
+  kind: CompletionItemKind.EnumMember,
+  insertText: `'${v}'`,
+  detail: 'HTL Context Option'
+}));
+
+async function parseDialogProperties(dialogXmlPath: string): Promise<string[]> {
+  try {
+    const content = await fs.readFile(dialogXmlPath, 'utf-8');
+    const properties: string[] = [];
+    const parser = new Parser({
+      onattribute(name: string, value: string) {
+        if (name === 'name') {
+          const cleanName = value.replace(/^\.\//, '');
+          if (cleanName && !cleanName.includes('/') && !cleanName.includes(':')) {
+            properties.push(cleanName);
+          }
+        }
+      }
+    }, { xmlMode: true, lowerCaseTags: false, lowerCaseAttributeNames: false });
+    parser.write(content);
+    parser.end();
+    return Array.from(new Set(properties));
+  } catch (err) {
+    return [];
+  }
+}
+
+async function getComponentProperties(htmlFilePath: string): Promise<CompletionItem[]> {
+  const componentDir = path.dirname(htmlFilePath);
+  const touchUiDialogPath = path.join(componentDir, '_cq_dialog', '.content.xml');
+  const classicUiDialogPath = path.join(componentDir, 'dialog.xml');
+  
+  const properties = new Set<string>();
+  
+  const touchUiProps = await parseDialogProperties(touchUiDialogPath);
+  touchUiProps.forEach(p => properties.add(p));
+  
+  const classicUiProps = await parseDialogProperties(classicUiDialogPath);
+  classicUiProps.forEach(p => properties.add(p));
+  
+  return Array.from(properties).map(p => ({
+    label: p,
+    kind: CompletionItemKind.Field,
+    detail: 'Dialog Property'
+  }));
+}
+
+function getUseDeclarations(text: string): Map<string, string> {
+  const decls = new Map<string, string>();
+  const regex = /data-sly-use\.([a-zA-Z0-9_]+)\s*=\s*["']([^"']+)["']/g;
+  let match;
+  while ((match = regex.exec(text)) !== null) {
+    decls.set(match[1], match[2]);
+  }
+  return decls;
+}
+
+async function parseJavaGetters(javaFilePath: string): Promise<string[]> {
+  try {
+    let localPath = javaFilePath;
+    if (localPath.startsWith('file://')) {
+      localPath = fileURLToPath(localPath);
+    }
+    const content = await fs.readFile(localPath, 'utf-8');
+    const properties: string[] = [];
+    
+    const regex = /(?:public\s+)?(?:[a-zA-Z0-9_<>\?\[\]]+\s+)?(get|is)([A-Z][a-zA-Z0-9_]*)\s*\(\s*\)\s*(?:\{|;|\n)/g;
+    let match;
+    while ((match = regex.exec(content)) !== null) {
+      const prefix = match[1];
+      const name = match[2];
+      const propName = name.charAt(0).toLowerCase() + name.slice(1);
+      
+      if (propName !== 'class' && propName !== 'hashCode') {
+        properties.push(propName);
+      }
+    }
+    return Array.from(new Set(properties));
+  } catch (err) {
+    return [];
+  }
+}
+
 connection.onCompletion(
-  (textDocumentPosition: TextDocumentPositionParams): CompletionItem[] => {
+  async (textDocumentPosition: TextDocumentPositionParams): Promise<CompletionItem[]> => {
     const document = documents.get(textDocumentPosition.textDocument.uri);
     if (!document) return [];
 
@@ -165,13 +302,51 @@ connection.onCompletion(
 
     if (isInsideExpression) {
       const exprContext = textBeforeCursor.substring(lastOpen);
+      
       if (exprContext.includes('@')) {
+        if (/context\s*=\s*['"]?$/i.test(textBeforeCursor)) {
+          return HTL_CONTEXTS;
+        }
         return HTL_OPTIONS;
       }
+      
+      const exprText = exprContext.substring(2);
+      const lastDot = exprText.lastIndexOf('.');
+      if (lastDot !== -1) {
+        const objectPart = exprText.substring(0, lastDot).trim();
+        const objectName = objectPart.split(/[\s+\-*/&|!]/).pop() || '';
+        
+        if (objectName === 'properties' || objectName === 'pageProperties' || objectName === 'inheritedPageProperties') {
+          if (document.uri.startsWith('file://')) {
+            const htmlPath = fileURLToPath(document.uri);
+            return getComponentProperties(htmlPath);
+          }
+        }
+        
+        const useDecls = getUseDeclarations(text);
+        if (useDecls.has(objectName)) {
+          const fullClassName = useDecls.get(objectName)!;
+          const simpleClassName = fullClassName.split('.').pop() || '';
+          
+          try {
+            const uri = await connection.sendRequest(FindClassFileRequest, { className: simpleClassName });
+            if (uri) {
+              const methods = await parseJavaGetters(uri);
+              return methods.map(m => ({
+                label: m,
+                kind: CompletionItemKind.Field,
+                detail: `Java Getter (${simpleClassName})`
+              }));
+            }
+          } catch (err) {
+            // Ignore request errors
+          }
+        }
+      }
+
       return HTL_GLOBALS;
     }
     
-    // Fallback: provide attributes if we type inside a tag
     const lastTagOpen = textBeforeCursor.lastIndexOf('<');
     const lastTagClose = textBeforeCursor.lastIndexOf('>');
     if (lastTagOpen > lastTagClose) {

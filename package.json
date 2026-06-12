@@ -27,7 +27,7 @@
           "Sightly"
         ],
         "extensions": [
-          ".html"
+          ".htl"
         ]
       }
     ],
@@ -41,19 +41,32 @@
         "command": "aem-tools.syncFromAEM",
         "title": "AEM: Sync from Server",
         "category": "AEM"
+      },
+      {
+        "command": "aem-tools.testConnection",
+        "title": "AEM: Test Connection",
+        "category": "AEM"
       }
     ],
     "menus": {
       "explorer/context": [
         {
           "command": "aem-tools.syncToAEM",
-          "group": "aem-tools"
+          "group": "aem-tools@1"
+        },
+        {
+          "command": "aem-tools.syncFromAEM",
+          "group": "aem-tools@2"
         }
       ],
       "editor/context": [
         {
           "command": "aem-tools.syncToAEM",
-          "group": "aem-tools"
+          "group": "aem-tools@1"
+        },
+        {
+          "command": "aem-tools.syncFromAEM",
+          "group": "aem-tools@2"
         }
       ]
     },

@@ -6,6 +6,8 @@ import {
   ServerOptions,
   TransportKind
 } from 'vscode-languageclient/node';
+import { getJcrPath } from './utils/jcrUtils';
+import * as httpClient from './utils/httpClient';
 
 let client: LanguageClient;
 
@@ -59,52 +61,108 @@ export function activate(context: ExtensionContext) {
   // Register AEM sync commands
   const syncToAemCmd = commands.registerCommand('aem-tools.syncToAEM', async (uri) => {
     try {
-      import('vscode').then(async vscode => {
-        const targetUri = uri || vscode.window.activeTextEditor?.document.uri;
-        if (!targetUri) {
-          vscode.window.showErrorMessage('No file selected to sync to AEM.');
-          return;
-        }
+      const targetUri = uri || window.activeTextEditor?.document.uri;
+      if (!targetUri) {
+        window.showErrorMessage('No file selected to sync to AEM.');
+        return;
+      }
 
-        const config = vscode.workspace.getConfiguration('aemTools');
-        const host = config.get<string>('host');
-        const username = config.get<string>('username');
-        const password = config.get<string>('password');
-        
-        let targetUrl = host || 'http://localhost:4502';
-        if (username && password && targetUrl.includes('://')) {
-          const parts = targetUrl.split('://');
-          targetUrl = `${parts[0]}://${username}:${password}@${parts[1]}`;
-        }
+      const config = workspace.getConfiguration('aemTools');
+      const host = config.get<string>('host') || 'http://localhost:4502';
+      const username = config.get<string>('username') || 'admin';
+      const password = config.get<string>('password') || 'admin';
+      
+      let targetUrl = host;
+      if (targetUrl.includes('://')) {
+        const parts = targetUrl.split('://');
+        targetUrl = `${parts[0]}://${username}:${password}@${parts[1]}`;
+      } else {
+        targetUrl = `http://${username}:${password}@${targetUrl}`;
+      }
 
-        vscode.window.showInformationMessage(`Syncing ${path.basename(targetUri.fsPath)} to AEM...`);
-        
-        // Dynamically import ESM module
-        const aemsync = await Function('return import("aemsync")')();
-        
-        const pushGen = aemsync.push({
-          payload: [targetUri.fsPath],
-          targets: [targetUrl]
-        });
-
-        for await (const result of pushGen) {
-          if (result.response?.err) {
-            vscode.window.showErrorMessage(`AEM Sync Error: ${result.response.err.message}`);
-          } else {
-            vscode.window.showInformationMessage(`Successfully synced ${path.basename(targetUri.fsPath)} to AEM.`);
-          }
-        }
+      window.showInformationMessage(`Syncing ${path.basename(targetUri.fsPath)} to AEM...`);
+      
+      // Load standard CommonJS aemsync module
+      const aemsync = require('aemsync');
+      
+      const pushGen = aemsync.push({
+        payload: [targetUri.fsPath],
+        targets: [targetUrl]
       });
+
+      for await (const result of pushGen) {
+        if (result.response?.err) {
+          window.showErrorMessage(`AEM Sync Error: ${result.response.err.message}`);
+        } else {
+          window.showInformationMessage(`Successfully synced ${path.basename(targetUri.fsPath)} to AEM.`);
+        }
+      }
     } catch (err: any) {
       window.showErrorMessage(`AEM Sync failed: ${err.message}`);
     }
   });
   
-  const syncFromAemCmd = commands.registerCommand('aem-tools.syncFromAEM', () => {
-    window.showInformationMessage('Sync from AEM not yet implemented.');
+  const syncFromAemCmd = commands.registerCommand('aem-tools.syncFromAEM', async (uri) => {
+    try {
+      const targetUri = uri || window.activeTextEditor?.document.uri;
+      if (!targetUri) {
+        window.showErrorMessage('No file selected to sync from AEM.');
+        return;
+      }
+
+      const jcrPath = getJcrPath(targetUri.fsPath);
+      if (!jcrPath) {
+        window.showErrorMessage(`File is not located under a 'jcr_root' directory: ${path.basename(targetUri.fsPath)}`);
+        return;
+      }
+
+      const config = workspace.getConfiguration('aemTools');
+      const host = config.get<string>('host') || 'http://localhost:4502';
+      const username = config.get<string>('username') || 'admin';
+      const password = config.get<string>('password') || 'admin';
+
+      window.showInformationMessage(`Syncing ${path.basename(targetUri.fsPath)} from AEM...`);
+
+      const targetUrl = `${host}${jcrPath}`;
+      const res = await httpClient.get(targetUrl, username, password);
+
+      if (res.statusCode === 200) {
+        await workspace.fs.writeFile(targetUri, res.buffer);
+        window.showInformationMessage(`Successfully synced ${path.basename(targetUri.fsPath)} from AEM.`);
+      } else {
+        window.showErrorMessage(`Failed to pull from AEM (status code ${res.statusCode}).`);
+      }
+    } catch (err: any) {
+      window.showErrorMessage(`AEM Sync From failed: ${err.message}`);
+    }
   });
 
-  context.subscriptions.push(syncToAemCmd, syncFromAemCmd);
+  const testConnectionCmd = commands.registerCommand('aem-tools.testConnection', async () => {
+    const config = workspace.getConfiguration('aemTools');
+    const host = config.get<string>('host') || 'http://localhost:4502';
+    const username = config.get<string>('username') || 'admin';
+    const password = config.get<string>('password') || 'admin';
+
+    window.showInformationMessage(`Testing connection to AEM at ${host}...`);
+
+    try {
+      // Packmgr service JSP endpoint requires authentication and responds with 200/500 depending on credentials
+      const testUrl = `${host}/crx/packmgr/service.jsp?cmd=help`;
+      const res = await httpClient.get(testUrl, username, password);
+      
+      if (res.statusCode === 200) {
+        window.showInformationMessage(`Successfully connected to AEM at ${host}!`);
+      } else if (res.statusCode === 401) {
+        window.showErrorMessage(`Failed to connect to AEM: Unauthorized (status code ${res.statusCode}). Check username/password.`);
+      } else {
+        window.showErrorMessage(`Failed to connect to AEM (status code ${res.statusCode}).`);
+      }
+    } catch (err: any) {
+      window.showErrorMessage(`Failed to connect to AEM: ${err.message}`);
+    }
+  });
+
+  context.subscriptions.push(syncToAemCmd, syncFromAemCmd, testConnectionCmd);
 }
 
 export function deactivate(): Thenable<void> | undefined {
@@ -113,3 +171,4 @@ export function deactivate(): Thenable<void> | undefined {
   }
   return client.stop();
 }
+
