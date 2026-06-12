@@ -22,6 +22,12 @@ const clientConfig = {
   target: 'node18',
   sourcemap: !minify,
   minify: minify,
+  define: {
+    'import.meta.url': 'importMetaUrl',
+  },
+  banner: {
+    js: 'const importMetaUrl = require("url").pathToFileURL(__filename).href;',
+  },
 };
 
 const serverConfig = {
@@ -34,7 +40,24 @@ const serverConfig = {
   target: 'node18',
   sourcemap: !minify,
   minify: minify,
+  define: {
+    'import.meta.url': 'importMetaUrl',
+  },
+  banner: {
+    js: 'const importMetaUrl = require("url").pathToFileURL(__filename).href;',
+  },
 };
+
+function copyAemSyncData() {
+  try {
+    const src = path.join(__dirname, 'node_modules', 'aemsync', 'data');
+    const dest = path.join(__dirname, 'out', 'client', 'data');
+    fs.cpSync(src, dest, { recursive: true });
+    console.log('Copied aemsync data to out/client/data');
+  } catch (err) {
+    console.error('Failed to copy aemsync data:', err);
+  }
+}
 
 async function run() {
   if (watch) {
@@ -42,10 +65,12 @@ async function run() {
     const serverCtx = await esbuild.context(serverConfig);
     await clientCtx.watch();
     await serverCtx.watch();
+    copyAemSyncData();
     console.log('Watching for changes...');
   } else {
     await esbuild.build(clientConfig);
     await esbuild.build(serverConfig);
+    copyAemSyncData();
     console.log('Build complete.');
   }
 }
