@@ -1,0 +1,64 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "HTML Template Language (HTL)",
+  "scopeName": "text.html.htl",
+  "fileTypes": ["htl"],
+  "patterns": [
+    {
+      "include": "#htl-expressions"
+    },
+    {
+      "include": "#htl-attributes"
+    },
+    {
+      "include": "text.html.basic"
+    }
+  ],
+  "repository": {
+    "htl-expressions": {
+      "begin": "\\$\\{",
+      "beginCaptures": {
+        "0": { "name": "punctuation.section.embedded.begin.htl" }
+      },
+      "end": "\\}",
+      "endCaptures": {
+        "0": { "name": "punctuation.section.embedded.end.htl" }
+      },
+      "name": "meta.embedded.line.htl",
+      "patterns": [
+        {
+          "match": "\\b(properties|pageProperties|inheritedPageProperties|currentPage|resourcePage|request|response|log|out|resource|resourceDesign|currentDesign|component|componentContext|currentSession|currentNode)\\b",
+          "name": "variable.language.htl"
+        },
+        {
+          "match": "\\b(context|format|i18n|locale|timezone|join|type|scheme|domain|path|prependPath|appendPath|selectors|addSelectors|removeSelectors|extension|suffix|prependSuffix|appendSuffix|query|addQuery|removeQuery|fragment|begin|step|end|resourceType)\\b",
+          "name": "support.type.property-name.htl"
+        },
+        {
+          "match": "\\b(and|or|not|in)\\b",
+          "name": "keyword.operator.logical.htl"
+        },
+        {
+          "match": "'[^']*'|\"[^\"]*\"",
+          "name": "string.quoted.htl"
+        },
+        {
+          "match": "\\b-?\\d+(\\.\\d+)?\\b",
+          "name": "constant.numeric.htl"
+        },
+        {
+          "match": "@",
+          "name": "keyword.operator.option-marker.htl"
+        }
+      ]
+    },
+    "htl-attributes": {
+      "patterns": [
+        {
+          "match": "\\b(data-sly-(use|test|list|repeat|unwrap|set|text|attribute|element|include|resource|template|call))(\\.[a-zA-Z0-9_]+)?\\b",
+          "name": "entity.other.attribute-name.html.htl"
+        }
+      ]
+    }
+  }
+}

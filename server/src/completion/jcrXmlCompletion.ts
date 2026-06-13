@@ -5,6 +5,7 @@ import {
   Position
 } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
+import { getAllCategories } from '../clientlibs/clientlibIndex';
 
 export interface XmlPositionContext {
   mode: 'TEXT' | 'TAG_NAME' | 'ATTR_NAME' | 'ATTR_VALUE';
@@ -32,7 +33,7 @@ export function getXmlPositionContext(text: string, offset: number): XmlPosition
   let currentTagName = '';
   let currentAttrName = '';
   let currentAttrValue = '';
-  let quoteChar: '"' | "'" | null = null;
+  let quoteChar: '"' | "'" | ' ' | null = null;
 
   for (let idx = lastOpenBracket + 1; idx < offset; idx++) {
     const char = text[idx];
@@ -93,6 +94,126 @@ export function getXmlPositionContext(text: string, offset: number): XmlPosition
     };
   }
 }
+
+export function getActiveXtype(textBeforeCursor: string): string | undefined {
+  const lastOpen = textBeforeCursor.lastIndexOf('<');
+  if (lastOpen === -1) return undefined;
+  const tagText = textBeforeCursor.substring(lastOpen);
+  const match = tagText.match(/\bxtype=["']([^"']+)["']/);
+  return match ? match[1] : undefined;
+}
+
+// ----------------------------------------------------
+// Classic UI Data Dictionaries
+// ----------------------------------------------------
+const CLASSIC_TAG_SNIPPETS: CompletionItem[] = [
+  {
+    label: 'dialog',
+    kind: CompletionItemKind.Snippet,
+    detail: 'Classic UI Dialog',
+    documentation: 'Standard root element representing a Classic UI Dialog.',
+    insertText: 'dialog\n\tjcr:primaryType="cq:Dialog"\n\ttitle="${1:Dialog Title}"\n\txtype="dialog">\n\t<items jcr:primaryType="cq:WidgetCollection">\n\t\t$0\n\t</items>\n</dialog>',
+    insertTextFormat: InsertTextFormat.Snippet
+  },
+  {
+    label: 'tabpanel',
+    kind: CompletionItemKind.Snippet,
+    detail: 'Classic UI TabPanel',
+    documentation: 'Tabbed layout container.',
+    insertText: 'tabs\n\tjcr:primaryType="cq:TabPanel">\n\t<items jcr:primaryType="cq:WidgetCollection">\n\t\t$0\n\t</items>\n</tabs>',
+    insertTextFormat: InsertTextFormat.Snippet
+  },
+  {
+    label: 'panel',
+    kind: CompletionItemKind.Snippet,
+    detail: 'Classic UI Panel',
+    documentation: 'Layout container for grouping widgets inside a tab.',
+    insertText: 'tab1\n\tjcr:primaryType="cq:Widget"\n\ttitle="${1:Tab Title}"\n\txtype="panel">\n\t<items jcr:primaryType="cq:WidgetCollection">\n\t\t$0\n\t</items>\n</tab1>',
+    insertTextFormat: InsertTextFormat.Snippet
+  },
+  {
+    label: 'widget',
+    kind: CompletionItemKind.Snippet,
+    detail: 'Classic UI Widget',
+    documentation: 'A generic Classic UI widget placeholder.',
+    insertText: '${1:field}\n\tjcr:primaryType="cq:Widget"\n\tfieldLabel="${2:Label}"\n\tname="./${3:propertyName}"\n\txtype="${4:textfield}" />',
+    insertTextFormat: InsertTextFormat.Snippet
+  }
+];
+
+const CLASSIC_XTYPE_COMPLETIONS: CompletionItem[] = [
+  { label: '"textfield"', kind: CompletionItemKind.Value, detail: 'Classic UI Textfield', documentation: 'Single-line text input field widget.' },
+  { label: '"textarea"', kind: CompletionItemKind.Value, detail: 'Classic UI Textarea', documentation: 'Multi-line text input area widget.' },
+  { label: '"numberfield"', kind: CompletionItemKind.Value, detail: 'Classic UI Numberfield', documentation: 'Numeric input field widget.' },
+  { label: '"datefield"', kind: CompletionItemKind.Value, detail: 'Classic UI Datefield', documentation: 'Date picker input field widget.' },
+  { label: '"selection"', kind: CompletionItemKind.Value, detail: 'Classic UI Selection', documentation: 'Drop-down select, checkbox list, or radio group widget. Requires type attribute.' },
+  { label: '"pathfield"', kind: CompletionItemKind.Value, detail: 'Classic UI Pathfield', documentation: 'Repository path browser input field widget.' },
+  { label: '"multifield"', kind: CompletionItemKind.Value, detail: 'Classic UI Multifield', documentation: 'Multi-value field editor that duplicates a child widget configuration.' },
+  { label: '"richtext"', kind: CompletionItemKind.Value, detail: 'Classic UI Richtext', documentation: 'WYSIWYG Rich Text Editor widget.' },
+  { label: '"checkbox"', kind: CompletionItemKind.Value, detail: 'Classic UI Checkbox', documentation: 'Single checkbox toggle widget.' },
+  { label: '"dialogfield"', kind: CompletionItemKind.Value, detail: 'Classic UI Dialogfield', documentation: 'Wrapper for fields inside a custom dialog.' },
+  { label: '"panel"', kind: CompletionItemKind.Value, detail: 'Classic UI Panel', documentation: 'Layout container for grouping widgets.' },
+  { label: '"tabpanel"', kind: CompletionItemKind.Value, detail: 'Classic UI TabPanel', documentation: 'Tabbed layout container.' },
+  { label: '"hidden"', kind: CompletionItemKind.Value, detail: 'Classic UI Hidden', documentation: 'Hidden input field to store non-editable values.' },
+  { label: '"datetime"', kind: CompletionItemKind.Value, detail: 'Classic UI DateTime', documentation: 'Combined Date and Time selection field.' },
+  { label: '"combobox"', kind: CompletionItemKind.Value, detail: 'Classic UI ComboBox', documentation: 'Text field combined with a dropdown list.' },
+  { label: '"browsefield"', kind: CompletionItemKind.Value, detail: 'Classic UI Browsefield', documentation: 'Field with a file system browser button.' },
+  { label: '"tags"', kind: CompletionItemKind.Value, detail: 'Classic UI Tags', documentation: 'AEM Tags selection widget.' },
+  { label: '"cq.tagspanel"', kind: CompletionItemKind.Value, detail: 'Classic UI TagsPanel', documentation: 'Standard tag selector pane.' },
+  { label: '"static"', kind: CompletionItemKind.Value, detail: 'Classic UI Static', documentation: 'Static text or HTML display label.' }
+];
+
+const CLASSIC_COMMON_ATTRIBUTES: CompletionItem[] = [
+  { label: 'jcr:primaryType', kind: CompletionItemKind.Field, detail: 'String', documentation: 'Set to cq:Widget.' },
+  { label: 'xtype', kind: CompletionItemKind.Field, detail: 'String', documentation: 'The Classic UI widget type name.' },
+  { label: 'name', kind: CompletionItemKind.Field, detail: 'String', documentation: 'Target JCR property name prefix (e.g. ./title).' },
+  { label: 'fieldLabel', kind: CompletionItemKind.Field, detail: 'String', documentation: 'User-facing label for the field.' },
+  { label: 'fieldDescription', kind: CompletionItemKind.Field, detail: 'String', documentation: 'User-facing help description.' },
+  { label: 'defaultValue', kind: CompletionItemKind.Field, detail: 'String', documentation: 'Default fallback value.' },
+  { label: 'allowBlank', kind: CompletionItemKind.Field, detail: 'Boolean', documentation: 'Whether blank values are allowed ({Boolean}true).' },
+  { label: 'disabled', kind: CompletionItemKind.Field, detail: 'Boolean', documentation: 'Disables the field ({Boolean}true).' },
+  { label: 'visible', kind: CompletionItemKind.Field, detail: 'Boolean', documentation: 'Visibility of the widget ({Boolean}true).' }
+];
+
+const CLASSIC_TYPE_SPECIFIC_ATTRIBUTES: Record<string, CompletionItem[]> = {
+  textfield: [
+    { label: 'emptyText', kind: CompletionItemKind.Field, detail: 'String', documentation: 'Placeholder text shown when field is empty.' },
+    { label: 'maxLength', kind: CompletionItemKind.Field, detail: 'Integer', documentation: 'Maximum character length.' },
+    { label: 'regex', kind: CompletionItemKind.Field, detail: 'String', documentation: 'Regex validation string.' }
+  ],
+  textarea: [
+    { label: 'emptyText', kind: CompletionItemKind.Field, detail: 'String', documentation: 'Placeholder text.' },
+    { label: 'maxLength', kind: CompletionItemKind.Field, detail: 'Integer', documentation: 'Maximum character length.' }
+  ],
+  numberfield: [
+    { label: 'allowDecimals', kind: CompletionItemKind.Field, detail: 'Boolean', documentation: 'Allow decimals ({Boolean}true).' },
+    { label: 'allowNegative', kind: CompletionItemKind.Field, detail: 'Boolean', documentation: 'Allow negative values ({Boolean}true).' },
+    { label: 'minValue', kind: CompletionItemKind.Field, detail: 'Double', documentation: 'Minimum numeric value.' },
+    { label: 'maxValue', kind: CompletionItemKind.Field, detail: 'Double', documentation: 'Maximum numeric value.' }
+  ],
+  datefield: [
+    { label: 'format', kind: CompletionItemKind.Field, detail: 'String', documentation: 'Date format string (e.g., Y-m-d).' }
+  ],
+  selection: [
+    { label: 'type', kind: CompletionItemKind.Field, detail: 'String', documentation: 'Selection display type: select, checkbox, or radio.' },
+    { label: 'optionsProvider', kind: CompletionItemKind.Field, detail: 'String', documentation: 'Javascript function to dynamically fetch options.' },
+    { label: 'options', kind: CompletionItemKind.Field, detail: 'String', documentation: 'Path to node containing static options.' },
+    { label: 'multiSelect', kind: CompletionItemKind.Field, detail: 'Boolean', documentation: 'Enable multiple selections ({Boolean}true).' }
+  ],
+  pathfield: [
+    { label: 'rootPath', kind: CompletionItemKind.Field, detail: 'String', documentation: 'Root path of the repository browser (e.g., /content).' },
+    { label: 'escapeAmp', kind: CompletionItemKind.Field, detail: 'Boolean', documentation: 'Escapes ampersand characters ({Boolean}true).' },
+    { label: 'rootTitle', kind: CompletionItemKind.Field, detail: 'String', documentation: 'Title of the browser window.' }
+  ],
+  multifield: [
+    { label: 'orderable', kind: CompletionItemKind.Field, detail: 'Boolean', documentation: 'Allow reordering items ({Boolean}true).' },
+    { label: 'fieldConfig', kind: CompletionItemKind.Field, detail: 'Node', documentation: 'Subnode configuring the nested widget.' }
+  ],
+  richtext: [
+    { label: 'externalStyleSheets', kind: CompletionItemKind.Field, detail: 'String[]', documentation: 'Array of custom CSS stylesheets to load in editor.' },
+    { label: 'rtePlugins', kind: CompletionItemKind.Field, detail: 'Node', documentation: 'Subnode containing configuration for rich-text plugins.' }
+  ]
+};
 
 // ----------------------------------------------------
 // Data Dictionaries for Autocomplete Items
@@ -417,9 +538,11 @@ export function getJcrXmlCompletions(
 
   // 2. Classify active AEM document context
   const uri = document.uri;
-  let fileType: 'component' | 'clientlib' | 'dialog' | 'designdialog' | 'editconfig' | 'unknown' = 'unknown';
+  let fileType: 'component' | 'clientlib' | 'dialog' | 'designdialog' | 'editconfig' | 'classicdialog' | 'unknown' = 'unknown';
 
-  if (uri.endsWith('_cq_editConfig.xml')) {
+  if (uri.endsWith('/dialog.xml') || uri.endsWith('\\dialog.xml') || uri.endsWith('dialog.xml')) {
+    fileType = 'classicdialog';
+  } else if (uri.endsWith('_cq_editConfig.xml')) {
     fileType = 'editconfig';
   } else if (uri.includes('_cq_dialog')) {
     fileType = 'dialog';
@@ -446,6 +569,9 @@ export function getJcrXmlCompletions(
 
   if (context.mode === 'TAG_NAME') {
     switch (fileType) {
+      case 'classicdialog':
+        return CLASSIC_TAG_SNIPPETS;
+
       case 'dialog':
       case 'designdialog':
         // Standard coral templates inside dialog
@@ -473,6 +599,13 @@ export function getJcrXmlCompletions(
             detail: 'cq:dialog root tag',
             insertText: 'jcr:root xmlns:sling="http://sling.apache.org/jcr/sling/1.0" xmlns:cq="http://www.day.com/jcr/cq/1.0" xmlns:jcr="http://www.jcp.org/jcr/1.0" xmlns:nt="http://www.jcp.org/jcr/nt/1.0"\n\tjcr:primaryType="nt:unstructured"\n\tsling:resourceType="cq/gui/components/authoring/dialog"\n\tjcr:title="${1:Dialog Title}">\n\t<content\n\t\tjcr:primaryType="nt:unstructured"\n\t\tsling:resourceType="granite/ui/components/coral/foundation/container">\n\t\t<items jcr:primaryType="nt:unstructured">\n\t\t\t$0\n\t\t</items>\n\t</content>\n</jcr:root>',
             insertTextFormat: InsertTextFormat.Snippet
+          },
+          {
+            label: 'jcr:root (Classic Dialog)',
+            kind: CompletionItemKind.Snippet,
+            detail: 'cq:Dialog root tag',
+            insertText: 'jcr:root xmlns:sling="http://sling.apache.org/jcr/sling/1.0" xmlns:cq="http://www.day.com/jcr/cq/1.0" xmlns:jcr="http://www.jcp.org/jcr/1.0" xmlns:nt="http://www.jcp.org/jcr/nt/1.0"\n\tjcr:primaryType="cq:Dialog"\n\ttitle="${1:Dialog Title}"\n\txtype="dialog">\n\t<items jcr:primaryType="cq:WidgetCollection">\n\t\t$0\n\t</items>\n</jcr:root>',
+            insertTextFormat: InsertTextFormat.Snippet
           }
         ];
     }
@@ -480,6 +613,15 @@ export function getJcrXmlCompletions(
 
   if (context.mode === 'ATTR_NAME') {
     switch (fileType) {
+      case 'classicdialog':
+        {
+          const xtype = getActiveXtype(text.substring(0, offset));
+          if (xtype && CLASSIC_TYPE_SPECIFIC_ATTRIBUTES[xtype]) {
+            return [...CLASSIC_COMMON_ATTRIBUTES, ...CLASSIC_TYPE_SPECIFIC_ATTRIBUTES[xtype]];
+          }
+          return CLASSIC_COMMON_ATTRIBUTES;
+        }
+
       case 'dialog':
       case 'designdialog':
         return GRANITE_ATTRIBUTES;
@@ -514,8 +656,53 @@ export function getJcrXmlCompletions(
       return BOOLEAN_VALUES;
     }
 
+    if (['categories', 'dependencies', 'embed'].includes(attr)) {
+      return getAllCategories().map(cat => ({
+        label: cat,
+        kind: CompletionItemKind.Value,
+        detail: 'ClientLib Category'
+      }));
+    }
+
+    if (attr === 'xtype' && (fileType === 'classicdialog' || fileType === 'unknown')) {
+      return CLASSIC_XTYPE_COMPLETIONS;
+    }
+
+    if (attr === 'type' && fileType === 'classicdialog') {
+      const xtype = getActiveXtype(text.substring(0, offset));
+      if (xtype === 'selection') {
+        return [
+          { label: '"select"', kind: CompletionItemKind.Value, documentation: 'Select Dropdown List' },
+          { label: '"checkbox"', kind: CompletionItemKind.Value, documentation: 'Checkbox List' },
+          { label: '"radio"', kind: CompletionItemKind.Value, documentation: 'Radio Option Group' }
+        ];
+      }
+    }
+
+    if (attr === 'rootPath' && fileType === 'classicdialog') {
+      return [
+        { label: '"/content"', kind: CompletionItemKind.Value },
+        { label: '"/etc"', kind: CompletionItemKind.Value }
+      ];
+    }
+
     if (attr === 'jcr:primaryType') {
       switch (fileType) {
+        case 'classicdialog':
+          if (tag === 'dialog' || tag === 'jcr:root') {
+            return [{ label: '"cq:Dialog"', kind: CompletionItemKind.Value }];
+          }
+          if (tag === 'items') {
+            return [{ label: '"cq:WidgetCollection"', kind: CompletionItemKind.Value }];
+          }
+          if (tag === 'tabs') {
+            return [{ label: '"cq:TabPanel"', kind: CompletionItemKind.Value }];
+          }
+          return [
+            { label: '"cq:Widget"', kind: CompletionItemKind.Value },
+            { label: '"cq:WidgetCollection"', kind: CompletionItemKind.Value }
+          ];
+
         case 'component':
           return tag === 'jcr:root'
             ? [{ label: '"cq:Component"', kind: CompletionItemKind.Value }]

@@ -30,15 +30,22 @@ export function activate(context: ExtensionContext) {
 
   // Options to control the language client
   const clientOptions: LanguageClientOptions = {
-    // Register the server for htl, html and xml documents
+    // Register the server for htl, html, xml, clientlib asset lists and OSGi config documents
     documentSelector: [
       { scheme: 'file', language: 'htl' },
       { scheme: 'file', language: 'html' },
-      { scheme: 'file', language: 'xml' }
+      { scheme: 'file', language: 'xml' },
+      { scheme: 'file', language: 'aem-clientlib-txt' },
+      { scheme: 'file', pattern: '**/osgiconfig/config*/**/*.cfg.json' },
+      { scheme: 'file', pattern: '**/osgiconfig/config*/**/*.config' }
     ],
     synchronize: {
-      // Notify the server about file changes to '.clientrc files contained in the workspace
-      fileEvents: workspace.createFileSystemWatcher('**/.clientrc')
+      // Notify the server about changes to configurations, metatypes, and content definitions
+      fileEvents: [
+        workspace.createFileSystemWatcher('**/.clientrc'),
+        workspace.createFileSystemWatcher('**/OSGI-INF/metatype/*.xml'),
+        workspace.createFileSystemWatcher('**/.content.xml')
+      ]
     }
   };
 

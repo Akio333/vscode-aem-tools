@@ -22,6 +22,14 @@ import {
 import { getCompletions } from './completion/htlCompletion';
 import { getJcrXmlCompletions } from './completion/jcrXmlCompletion';
 
+import { initializeOsgiIndex } from './osgi/osgiIndex';
+import { initializeClientLibsIndex } from './clientlibs/clientlibIndex';
+import { validateOsgiConfig } from './validation/osgiValidation';
+import { getOsgiCompletions } from './completion/osgiCompletion';
+import { getClientLibTxtCompletions } from './completion/clientlibTxtCompletion';
+import { getHoverSupport } from './completion/hoverProvider';
+import { getDefinitionSupport } from './completion/definitionProvider';
+
 const Compiler = require('@adobe/htlengine/src/compiler/Compiler.js');
 
 // Create a connection for the server, using Node's IPC as a transport.
@@ -32,6 +40,7 @@ const documents: TextDocuments<TextDocument> = new TextDocuments(TextDocument);
 
 let hasConfigurationCapability = false;
 let hasWorkspaceFolderCapability = false;
+let workspaceRoots: string[] = [];
 
 connection.onInitialize((params: InitializeParams) => {
   const capabilities = params.capabilities;
@@ -43,6 +52,13 @@ connection.onInitialize((params: InitializeParams) => {
     capabilities.workspace && !!capabilities.workspace.workspaceFolders
   );
 
+  workspaceRoots = [];
+  if (params.workspaceFolders) {
+    workspaceRoots = params.workspaceFolders.map(folder => folder.uri);
+  } else if (params.rootUri) {
+    workspaceRoots = [params.rootUri];
+  }
+
   const result: InitializeResult = {
     capabilities: {
       textDocumentSync: TextDocumentSyncKind.Incremental,
@@ -50,7 +66,8 @@ connection.onInitialize((params: InitializeParams) => {
         resolveProvider: true,
         triggerCharacters: ['<', '.', '$', '{', '@', ' ', '"', "'", ':']
       },
-      definitionProvider: true
+      definitionProvider: true,
+      hoverProvider: true
     }
   };
   if (hasWorkspaceFolderCapability) {
@@ -64,12 +81,31 @@ connection.onInitialize((params: InitializeParams) => {
 });
 
 connection.onInitialized(() => {
+  // Execute indexers asynchronously
+  initializeOsgiIndex(workspaceRoots).catch(err => {
+    connection.console.error(`OSGi Index error: ${err.message}`);
+  });
+  initializeClientLibsIndex(workspaceRoots).catch(err => {
+    connection.console.error(`ClientLibs Index error: ${err.message}`);
+  });
+
   if (hasConfigurationCapability) {
     connection.client.register(DidChangeConfigurationNotification.type, undefined);
   }
   if (hasWorkspaceFolderCapability) {
     connection.workspace.onDidChangeWorkspaceFolders(_event => {
       connection.console.log('Workspace folder change event received.');
+      connection.workspace.getWorkspaceFolders().then(folders => {
+        if (folders) {
+          workspaceRoots = folders.map(f => f.uri);
+          initializeOsgiIndex(workspaceRoots).catch(err => {
+            connection.console.error(`OSGi Index error: ${err.message}`);
+          });
+          initializeClientLibsIndex(workspaceRoots).catch(err => {
+            connection.console.error(`ClientLibs Index error: ${err.message}`);
+          });
+        }
+      });
     });
   }
 });
@@ -104,6 +140,13 @@ documents.onDidClose(event => {
 });
 
 async function validateTextDocument(textDocument: TextDocument): Promise<void> {
+  const uri = textDocument.uri;
+  if (uri.endsWith('.cfg.json') || uri.endsWith('.config')) {
+    const diagnostics = validateOsgiConfig(textDocument);
+    connection.sendDiagnostics({ uri, diagnostics });
+    return;
+  }
+
   if (textDocument.languageId === 'xml' || textDocument.uri.endsWith('.xml')) {
     connection.sendDiagnostics({ uri: textDocument.uri, diagnostics: [] });
     return;
@@ -229,6 +272,15 @@ connection.onCompletion(
     const document = documents.get(textDocumentPosition.textDocument.uri);
     if (!document) return [];
 
+    const uri = document.uri;
+    if (uri.endsWith('.cfg.json') || uri.endsWith('.config')) {
+      return getOsgiCompletions(document, textDocumentPosition.position);
+    }
+
+    if (uri.endsWith('js.txt') || uri.endsWith('css.txt')) {
+      return getClientLibTxtCompletions(document, textDocumentPosition.position);
+    }
+
     if (document.languageId === 'xml' || document.uri.endsWith('.xml')) {
       return getJcrXmlCompletions(document, textDocumentPosition.position);
     }
@@ -249,10 +301,14 @@ connection.onCompletion(
 
 connection.onCompletionResolve((item: CompletionItem): CompletionItem => item);
 
-// Go To Definition for Java Models
-connection.onDefinition(async (params: TextDocumentPositionParams): Promise<Location | null> => {
+// Go To Definition for Java Models & HTL Templates/Clientlibs
+connection.onDefinition(async (params: TextDocumentPositionParams): Promise<Location | Location[] | null> => {
   const document = documents.get(params.textDocument.uri);
   if (!document) return null;
+
+  // 1. Try template / clientlib resolution first
+  const localLoc = await getDefinitionSupport(document, params.position);
+  if (localLoc) return localLoc;
 
   const text = document.getText();
   const offset = document.offsetAt(params.position);
@@ -287,6 +343,13 @@ connection.onDefinition(async (params: TextDocumentPositionParams): Promise<Loca
   }
   
   return null;
+});
+
+// Hover Support for HTL, OSGi configurations, and Classic UI widgets
+connection.onHover(async (params) => {
+  const document = documents.get(params.textDocument.uri);
+  if (!document) return null;
+  return getHoverSupport(document, params.position);
 });
 
 documents.listen(connection);

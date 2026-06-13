@@ -1,7 +1,7 @@
 {
   "name": "vscode-aem-tools",
   "displayName": "AEM Tools",
-  "description": "Code-assist features for Adobe Experience Manager development (HTL, JCR XML Autocomplete, JCR Sync)",
+  "description": "Developer tooling for Adobe Experience Manager (AEM) supporting HTL/Sightly, OSGi configurations, ClientLibs, and FileVault JCR XML configurations.",
   "version": "0.1.4",
   "publisher": "akio333",
   "license": "GPL-3.0-only",
@@ -34,6 +34,23 @@
         "extensions": [
           ".htl"
         ]
+      },
+      {
+        "id": "aem-clientlib-txt",
+        "aliases": [
+          "AEM Client Library Asset List"
+        ],
+        "filenames": [
+          "js.txt",
+          "css.txt"
+        ]
+      }
+    ],
+    "grammars": [
+      {
+        "language": "htl",
+        "scopeName": "text.html.htl",
+        "path": "./syntaxes/htl.tmLanguage.json"
       }
     ],
     "commands": [

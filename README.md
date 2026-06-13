@@ -42,26 +42,11 @@ If you prefer to build the extension manually from source, follow these steps:
 
 ## Features
 
-### 1. JCR Synchronization (Push & Pull)
-*   **Sync to Server**: Instantly push the active file or selected files from your local workspace to the running AEM instance.
-*   **Sync from Server**: Pull the latest code/properties of a file directly from the AEM JCR repository and update your local file.
-*   **Test Connection**: Quickly verify connection status and admin credentials to the configured AEM host.
-
-### 2. Real-Time HTL (Sightly) Code Validation
-*   Performs syntax validation and full compile-time checks on HTL templates using `@adobe/htlengine`.
-*   Unclosed tag structures, mismatched brackets, and invalid HTL expressions are reported in the VS Code **Problems** panel.
-
-### 3. Advanced Autocompletion
-*   **Dialog Properties**: Automatically parses Touch UI (`_cq_dialog/.content.xml`) and Classic UI (`dialog.xml`) definitions within the component's directory to suggest dialog fields when you type `properties.`, `pageProperties.`, or `inheritedPageProperties.`.
-*   **Java Sling Model Fields**: Scans HTL files for `data-sly-use.modelName="className"` statements, locates the corresponding Java file in the workspace, parses its public getter/boolean methods (e.g. `getName()`, `isEmpty()`), and autocompletes them when typing `${modelName.}`.
-*   **HTL Context Options**: Provides automatic suggestions for standard HTL context values (like `'html'`, `'text'`, `'uri'`, `'unsafe'`) when typing `@ context=`.
-*   **HTL Block Statements**: Suggests default block statements (e.g. `data-sly-use`, `data-sly-test`, `data-sly-list`) inside HTML tags.
-
-### 4. JCR XML Autocomplete
-*   **AEM cq:dialog & cq:design_dialog**: Autocomplete support for Granite UI Coral components and forms, offering complete tag snippets (e.g., `textfield`, `select`, `checkbox`, `pathfield`, `multifield`, `datepicker`, etc.), attribute completions (`fieldLabel`, `name`, `required`), and Granite resource types.
-*   **AEM cq:Component**: Autocomplete helper for components `.content.xml` including `jcr:root` and `cq:htmlTag` tag snippets, and key properties (`componentGroup`, `sling:resourceSuperType`, `cq:noDecoration`, `cq:isContainer`).
-*   **AEM Client Libraries**: Autocomplete for `cq:ClientLibraryFolder` `.content.xml` settings (`categories`, `dependencies`, `embed`, `allowProxy`).
-*   **AEM Edit Configs**: Autocomplete support in `_cq_editConfig.xml` for structural nodes (`cq:inplaceEditing`, `cq:listeners`, `cq:dropTargets`, `cq:actionConfigs`) and editing attributes/values.
+*   **📝 HTL (Sightly) Support:** Native syntax highlighting, real-time code validation (via `@adobe/htlengine`), autocomplete for global & local variables, Sling Model getters, hover documentation, and template navigation (Go to Definition for template includes & calls).
+*   **⚙️ OSGi Configuration Support:** Workspace indexing of metatypes (`OSGI-INF/metatype/*.xml`), offering autocomplete, hover descriptions, and type/required attribute validation for `.cfg.json` and `.config` files.
+*   **📦 JCR XML (FileVault) Support:** Autocomplete, template snippets, and quick documentation for Touch UI Granite forms (`_cq_dialog`), Classic UI widgets (`dialog.xml` with full `xtype` list and property suggestions), `cq:Component`, and `cq:editConfig`.
+*   **📁 Client Library (ClientLibs) Support:** Workspace category indexing, autocompletion of categories in HTL/XML, and asset autocomplete and Go to Definition inside `js.txt` and `css.txt` files.
+*   **🔄 JCR Synchronization:** Context menu commands to sync (push/pull) files to/from local workspace and target AEM instance, and quick connection test helper.
 
 ---
 

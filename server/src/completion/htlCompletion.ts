@@ -9,6 +9,7 @@ import * as path from 'path';
 import * as fs from 'fs/promises';
 import { fileURLToPath } from 'url';
 import { Parser } from 'htmlparser2';
+import { getAllCategories } from '../clientlibs/clientlibIndex';
 
 // HTML context parsing states
 export type HtmlContext = 'TEXT' | 'TAG_NAME' | 'ATTR_NAME' | 'ATTR_VALUE';
@@ -573,6 +574,15 @@ export async function getCompletions(
     
     // Scenario A: Expression options (after @)
     if (exprContext.includes('@')) {
+      // Check if typing inside a categories option: categories='...' or categories="..."
+      if (/categories\s*=\s*['"]?[a-zA-Z0-9\._\-]*$/i.test(textBeforeCursor)) {
+        return getAllCategories().map(cat => ({
+          label: cat,
+          kind: CompletionItemKind.Value,
+          detail: 'ClientLib Category'
+        }));
+      }
+
       // Check if typing inside a context option: context='...' or context="..."
       if (/context\s*=\s*['"]?[a-zA-Z]*$/i.test(textBeforeCursor)) {
         return HTL_CONTEXTS;
