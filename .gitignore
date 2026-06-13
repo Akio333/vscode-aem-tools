@@ -6,3 +6,4 @@ dist/
 .DS_Store
 scratch*.js
 scratch/
+browser/

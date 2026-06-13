@@ -120,6 +120,33 @@ async function validateTextDocument(textDocument: TextDocument): Promise<void> {
       .withRuntimeVar(Object.keys({}))
       .withRuntimeGlobalName('global');
 
+    // Wrap the default script resolver to avoid crashing on unresolved dependencies (e.g. Java/AEM Core Components)
+    const defaultResolver = (compiler as any)._scriptResolver;
+    if (typeof defaultResolver === 'function') {
+      (compiler as any).withScriptResolver(async (baseDir: string, uri: string) => {
+        try {
+          return await defaultResolver(baseDir, uri);
+        } catch (err) {
+          // Fallback to a mock path instead of throwing an error
+          return `mock-unresolved://${uri}`;
+        }
+      });
+    }
+
+    // Wrap the default template loader to return an empty template for unresolved scripts
+    const defaultLoader = (compiler as any)._templateLoader;
+    if (typeof defaultLoader === 'function') {
+      (compiler as any).withTemplateLoader(async (filePath: string, id: string) => {
+        if (filePath.startsWith('mock-unresolved://')) {
+          return {
+            data: '',
+            path: filePath
+          };
+        }
+        return await defaultLoader(filePath, id);
+      });
+    }
+
     await compiler.compileToString(text);
   } catch (err: any) {
     if (err && err.token) {
