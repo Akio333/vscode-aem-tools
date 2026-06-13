@@ -437,9 +437,19 @@ export function getDeclaredVariables(text: string): DeclaredVar[] {
   return vars;
 }
 
-// Dialog properties parsing helpers
+// Dialog properties parsing helpers with cache
+const dialogFileCache = new Map<string, { mtime: number; properties: string[] }>();
+
 async function parseDialogProperties(dialogXmlPath: string): Promise<string[]> {
   try {
+    const stats = await fs.stat(dialogXmlPath);
+    const mtime = stats.mtimeMs;
+
+    const cached = dialogFileCache.get(dialogXmlPath);
+    if (cached && cached.mtime === mtime) {
+      return cached.properties;
+    }
+
     const content = await fs.readFile(dialogXmlPath, 'utf-8');
     const properties: string[] = [];
     const parser = new Parser({
@@ -454,8 +464,12 @@ async function parseDialogProperties(dialogXmlPath: string): Promise<string[]> {
     }, { xmlMode: true, lowerCaseTags: false, lowerCaseAttributeNames: false });
     parser.write(content);
     parser.end();
-    return Array.from(new Set(properties));
+    
+    const result = Array.from(new Set(properties));
+    dialogFileCache.set(dialogXmlPath, { mtime, properties: result });
+    return result;
   } catch (err) {
+    dialogFileCache.delete(dialogXmlPath);
     return [];
   }
 }
@@ -494,12 +508,22 @@ export function getUseDeclarations(text: string): Map<string, string> {
   return decls;
 }
 
+const javaFileCache = new Map<string, { mtime: number; properties: string[] }>();
+
 export async function parseJavaGetters(javaFilePath: string): Promise<string[]> {
   try {
     let localPath = javaFilePath;
     if (localPath.startsWith('file://')) {
       localPath = fileURLToPath(localPath);
     }
+    const stats = await fs.stat(localPath);
+    const mtime = stats.mtimeMs;
+
+    const cached = javaFileCache.get(localPath);
+    if (cached && cached.mtime === mtime) {
+      return cached.properties;
+    }
+
     const content = await fs.readFile(localPath, 'utf-8');
     const properties: string[] = [];
     
@@ -514,8 +538,15 @@ export async function parseJavaGetters(javaFilePath: string): Promise<string[]> 
         properties.push(propName);
       }
     }
-    return Array.from(new Set(properties));
+    const result = Array.from(new Set(properties));
+    javaFileCache.set(localPath, { mtime, properties: result });
+    return result;
   } catch (err) {
+    let localPath = javaFilePath;
+    if (localPath.startsWith('file://')) {
+      localPath = fileURLToPath(localPath);
+    }
+    javaFileCache.delete(localPath);
     return [];
   }
 }

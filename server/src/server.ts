@@ -21,6 +21,8 @@ import {
 } from 'vscode-languageserver-textdocument';
 import { getCompletions } from './completion/htlCompletion';
 
+const Compiler = require('@adobe/htlengine/src/compiler/Compiler.js');
+
 // Create a connection for the server, using Node's IPC as a transport.
 const connection = createConnection(ProposedFeatures.all);
 
@@ -73,9 +75,31 @@ connection.onInitialized(() => {
 
 import { Parser } from 'htmlparser2';
 
-// ... (keep the imports and connection setup)
+const validationTimeouts = new Map<string, NodeJS.Timeout>();
+
 documents.onDidChangeContent(change => {
-  validateTextDocument(change.document);
+  const uri = change.document.uri;
+  const existingTimeout = validationTimeouts.get(uri);
+  if (existingTimeout) {
+    clearTimeout(existingTimeout);
+  }
+
+  const timeout = setTimeout(() => {
+    validateTextDocument(change.document);
+    validationTimeouts.delete(uri);
+  }, 500);
+
+  validationTimeouts.set(uri, timeout);
+});
+
+documents.onDidClose(event => {
+  const uri = event.document.uri;
+  const timeout = validationTimeouts.get(uri);
+  if (timeout) {
+    clearTimeout(timeout);
+    validationTimeouts.delete(uri);
+  }
+  connection.sendDiagnostics({ uri, diagnostics: [] });
 });
 
 async function validateTextDocument(textDocument: TextDocument): Promise<void> {
@@ -114,7 +138,6 @@ async function validateTextDocument(textDocument: TextDocument): Promise<void> {
 
   // 2. Full HTL syntax and compile-time validation (using @adobe/htlengine)
   try {
-    const { Compiler } = require('@adobe/htlengine');
     const compiler = new Compiler()
       .withDirectory('.')
       .includeRuntime(true)
