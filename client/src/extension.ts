@@ -30,8 +30,12 @@ export function activate(context: ExtensionContext) {
 
   // Options to control the language client
   const clientOptions: LanguageClientOptions = {
-    // Register the server for htl and html documents
-    documentSelector: [{ scheme: 'file', language: 'htl' }, { scheme: 'file', language: 'html' }],
+    // Register the server for htl, html and xml documents
+    documentSelector: [
+      { scheme: 'file', language: 'htl' },
+      { scheme: 'file', language: 'html' },
+      { scheme: 'file', language: 'xml' }
+    ],
     synchronize: {
       // Notify the server about file changes to '.clientrc files contained in the workspace
       fileEvents: workspace.createFileSystemWatcher('**/.clientrc')

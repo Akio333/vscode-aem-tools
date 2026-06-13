@@ -20,6 +20,7 @@ import {
   TextDocument
 } from 'vscode-languageserver-textdocument';
 import { getCompletions } from './completion/htlCompletion';
+import { getJcrXmlCompletions } from './completion/jcrXmlCompletion';
 
 const Compiler = require('@adobe/htlengine/src/compiler/Compiler.js');
 
@@ -47,7 +48,7 @@ connection.onInitialize((params: InitializeParams) => {
       textDocumentSync: TextDocumentSyncKind.Incremental,
       completionProvider: {
         resolveProvider: true,
-        triggerCharacters: ['<', '.', '$', '{', '@', ' ']
+        triggerCharacters: ['<', '.', '$', '{', '@', ' ', '"', "'", ':']
       },
       definitionProvider: true
     }
@@ -103,6 +104,10 @@ documents.onDidClose(event => {
 });
 
 async function validateTextDocument(textDocument: TextDocument): Promise<void> {
+  if (textDocument.languageId === 'xml' || textDocument.uri.endsWith('.xml')) {
+    connection.sendDiagnostics({ uri: textDocument.uri, diagnostics: [] });
+    return;
+  }
   const text = textDocument.getText();
   const diagnostics: Diagnostic[] = [];
 
@@ -223,6 +228,10 @@ connection.onCompletion(
   async (textDocumentPosition: TextDocumentPositionParams): Promise<CompletionItem[]> => {
     const document = documents.get(textDocumentPosition.textDocument.uri);
     if (!document) return [];
+
+    if (document.languageId === 'xml' || document.uri.endsWith('.xml')) {
+      return getJcrXmlCompletions(document, textDocumentPosition.position);
+    }
 
     return getCompletions(
       document,
