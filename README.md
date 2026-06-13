@@ -57,6 +57,12 @@ If you prefer to build the extension manually from source, follow these steps:
 *   **HTL Context Options**: Provides automatic suggestions for standard HTL context values (like `'html'`, `'text'`, `'uri'`, `'unsafe'`) when typing `@ context=`.
 *   **HTL Block Statements**: Suggests default block statements (e.g. `data-sly-use`, `data-sly-test`, `data-sly-list`) inside HTML tags.
 
+### 4. JCR XML Autocomplete
+*   **AEM cq:dialog & cq:design_dialog**: Autocomplete support for Granite UI Coral components and forms, offering complete tag snippets (e.g., `textfield`, `select`, `checkbox`, `pathfield`, `multifield`, `datepicker`, etc.), attribute completions (`fieldLabel`, `name`, `required`), and Granite resource types.
+*   **AEM cq:Component**: Autocomplete helper for components `.content.xml` including `jcr:root` and `cq:htmlTag` tag snippets, and key properties (`componentGroup`, `sling:resourceSuperType`, `cq:noDecoration`, `cq:isContainer`).
+*   **AEM Client Libraries**: Autocomplete for `cq:ClientLibraryFolder` `.content.xml` settings (`categories`, `dependencies`, `embed`, `allowProxy`).
+*   **AEM Edit Configs**: Autocomplete support in `_cq_editConfig.xml` for structural nodes (`cq:inplaceEditing`, `cq:listeners`, `cq:dropTargets`, `cq:actionConfigs`) and editing attributes/values.
+
 ---
 
 ## Configuration

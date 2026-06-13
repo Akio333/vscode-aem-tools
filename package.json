@@ -1,7 +1,7 @@
 {
   "name": "vscode-aem-tools",
   "displayName": "AEM Tools",
-  "description": "Code-assist features for Adobe Experience Manager development (HTL, JCR Sync)",
+  "description": "Code-assist features for Adobe Experience Manager development (HTL, JCR XML Autocomplete, JCR Sync)",
   "version": "0.1.4",
   "publisher": "akio333",
   "license": "GPL-3.0-only",
