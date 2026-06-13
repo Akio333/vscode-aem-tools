@@ -2,7 +2,7 @@
   "name": "vscode-aem-tools",
   "displayName": "AEM Tools",
   "description": "Developer tooling for Adobe Experience Manager (AEM) supporting HTL/Sightly, OSGi configurations, ClientLibs, and FileVault JCR XML configurations.",
-  "version": "0.1.4",
+  "version": "1.0.0",
   "publisher": "akio333",
   "license": "GPL-3.0-only",
   "icon": "icon.png",
