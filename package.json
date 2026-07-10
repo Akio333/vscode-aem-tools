@@ -69,6 +69,11 @@
         "command": "aem-tools.testConnection",
         "title": "AEM: Test Connection",
         "category": "AEM"
+      },
+      {
+        "command": "aem-tools.toggleFeDevMode",
+        "title": "AEM: Toggle FE Dev Mode",
+        "category": "AEM"
       }
     ],
     "menus": {
@@ -111,6 +116,11 @@
           "type": "string",
           "default": "admin",
           "description": "AEM Password."
+        },
+        "aemTools.feDevMode": {
+          "type": "boolean",
+          "default": false,
+          "description": "Automatically sync changed files under ui.apps/**/jcr_root to AEM."
         }
       }
     }
