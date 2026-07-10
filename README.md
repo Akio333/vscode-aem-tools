@@ -12,7 +12,8 @@ AEM Tools is a lightweight, feature-rich Visual Studio Code extension designed t
 *   **⚙️ OSGi Configuration Support:** Workspace indexing of metatypes (`OSGI-INF/metatype/*.xml`), offering autocomplete, hover descriptions, and type/required attribute validation for `.cfg.json` and `.config` files.
 *   **📦 JCR XML (FileVault) Support:** Autocomplete, template snippets, and quick documentation for Touch UI Granite forms (`_cq_dialog`), Classic UI widgets (`dialog.xml` with full `xtype` list and property suggestions), `cq:Component`, and `cq:editConfig`.
 *   **📁 Client Library (ClientLibs) Support:** Workspace category indexing, autocompletion of categories in HTL/XML, and asset autocomplete and Go to Definition inside `js.txt` and `css.txt` files.
-*   **🔄 JCR Synchronization:** Context menu commands to sync (push/pull) files to/from local workspace and target AEM instance, and quick connection test helper.
+*   **🔄 JCR Synchronization:** Context menu commands to sync (push/pull) files to/from local workspace and target AEM instance, plus a quick connection test helper.
+*   **⚡ FE Dev Mode:** An opt-in, save-to-sync workflow for files under `ui.apps/**/jcr_root`, with a per-file debounce to prevent duplicate uploads.
 
 ---
 
@@ -25,6 +26,7 @@ AEM Tools can be configured in your VS Code workspace settings:
 | `aemTools.host` | `string` | `http://localhost:4502` | The URL of the target AEM instance. |
 | `aemTools.username` | `string` | `admin` | AEM Username. |
 | `aemTools.password` | `string` | `admin` | AEM Password. |
+| `aemTools.feDevMode` | `boolean` | `false` | Automatically sync changed or newly created files under `ui.apps/**/jcr_root`. |
 
 ---
 
@@ -35,6 +37,7 @@ Access the following commands via the context menu (right-click on a file) or th
 *   **AEM: Sync to Server** (`aem-tools.syncToAEM`): Pushes the selected file/folder under `jcr_root` to AEM.
 *   **AEM: Sync from Server** (`aem-tools.syncFromAEM`): Pulls the selected file's content from AEM JCR to the workspace.
 *   **AEM: Test Connection** (`aem-tools.testConnection`): Tests connectivity and credentials with the AEM instance.
+*   **AEM: Toggle FE Dev Mode** (`aem-tools.toggleFeDevMode`): Enables or disables automatic sync for changed files under `ui.apps/**/jcr_root`.
 
 ---
 
