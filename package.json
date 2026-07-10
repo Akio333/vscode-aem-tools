@@ -20,6 +20,7 @@
   "activationEvents": [
     "onLanguage:html",
     "onLanguage:xml",
+    "onLanguage:aem-clientlib-txt",
     "workspaceContains:jcr_root"
   ],
   "main": "./out/client/src/extension.js",
