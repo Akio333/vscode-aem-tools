@@ -632,7 +632,7 @@ export async function getCompletions(
         const simpleClassName = fullClassName.split('.').pop() || '';
         
         try {
-          const uri = await findClassFile(simpleClassName);
+          const uri = await findClassFile(fullClassName);
           if (uri) {
             const methods = await parseJavaGetters(uri);
             return methods.map(m => ({

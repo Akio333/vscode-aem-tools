@@ -325,19 +325,17 @@ connection.onDefinition(async (params: TextDocumentPositionParams): Promise<Loca
     
     // Is it a Java class? e.g. com.wknd.core.models.Byline
     if (/^[a-z0-9\.]+\.[A-Z][a-zA-Z0-9_]*$/.test(value)) {
-      const className = value.split('.').pop();
-      if (className) {
-        // Send request to client to find the file
-        const uri = await connection.sendRequest(FindClassFileRequest, { className });
-        if (uri) {
-          return {
-            uri,
-            range: {
-              start: { line: 0, character: 0 },
-              end: { line: 0, character: 0 }
-            }
-          };
-        }
+      // Send the fully-qualified name so the client can resolve the correct
+      // source file across arbitrary Maven modules.
+      const uri = await connection.sendRequest(FindClassFileRequest, { className: value });
+      if (uri) {
+        return {
+          uri,
+          range: {
+            start: { line: 0, character: 0 },
+            end: { line: 0, character: 0 }
+          }
+        };
       }
     }
   }
