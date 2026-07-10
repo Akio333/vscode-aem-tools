@@ -2,14 +2,33 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import { CompletionItem, CompletionItemKind, Position } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
-import { fileURLToPath } from 'url';
+import { fileURLToPath, pathToFileURL } from 'url';
+
+function resolveInsideClientLib(clientlibFolder: string, candidate: string): string | null {
+  const root = path.resolve(clientlibFolder);
+  const resolved = path.resolve(root, candidate);
+  return resolved === root || resolved.startsWith(`${root}${path.sep}`) ? resolved : null;
+}
+
+function getActiveBaseFolder(lines: string[], lineIndex: number, clientlibFolder: string): string {
+  let baseFolder = path.resolve(clientlibFolder);
+  for (let i = 0; i < lineIndex; i++) {
+    const line = lines[i].trim();
+    if (line.startsWith('#base=')) {
+      const configuredBase = resolveInsideClientLib(clientlibFolder, line.substring(6).trim());
+      if (configuredBase) {
+        baseFolder = configuredBase;
+      }
+    }
+  }
+  return baseFolder;
+}
 
 export async function getClientLibTxtCompletions(
   document: TextDocument,
   position: Position
 ): Promise<CompletionItem[]> {
   const text = document.getText();
-  const offset = document.offsetAt(position);
   const filePath = fileURLToPath(document.uri);
   const clientlibFolder = path.dirname(filePath);
 
@@ -23,20 +42,13 @@ export async function getClientLibTxtCompletions(
   }
 
   // Find active #base in the document up to the current line
-  let baseDir = clientlibFolder;
-  for (let i = 0; i < position.line; i++) {
-    const l = lines[i].trim();
-    if (l.startsWith('#base=')) {
-      const baseName = l.substring(6).trim();
-      baseDir = path.join(clientlibFolder, baseName);
-    }
-  }
+  let baseDir = getActiveBaseFolder(lines, position.line, clientlibFolder);
 
   // Determine typed prefix path
   let typedSegment = textBeforeCursor;
   if (typedSegment.startsWith('#base=')) {
     typedSegment = typedSegment.substring(6).trim();
-    baseDir = clientlibFolder; // #base= folder is relative to clientlib root itself
+    baseDir = path.resolve(clientlibFolder); // #base= is always relative to the ClientLib root
   }
 
   // Resolve directory where we should search
@@ -46,7 +58,7 @@ export async function getClientLibTxtCompletions(
 
   if (lastSlash !== -1) {
     const subPath = typedSegment.substring(0, lastSlash);
-    searchDir = path.join(baseDir, subPath);
+    searchDir = resolveInsideClientLib(clientlibFolder, path.relative(clientlibFolder, baseDir) + path.sep + subPath) || baseDir;
     filterPrefix = typedSegment.substring(lastSlash + 1);
   }
 
@@ -59,6 +71,9 @@ export async function getClientLibTxtCompletions(
     const entries = await fs.readdir(searchDir, { withFileTypes: true });
     for (const entry of entries) {
       if (entry.name.startsWith('.')) {
+        continue;
+      }
+      if (!entry.name.startsWith(filterPrefix)) {
         continue;
       }
       
@@ -104,21 +119,20 @@ export async function resolveClientLibAssetPath(
   const clientlibFolder = path.dirname(fileURLToPath(documentUri));
 
   // Find active #base
-  let baseFolder = clientlibFolder;
   const lines = fullText.split(/\r?\n/);
-  for (let i = 0; i < lineIndex; i++) {
-    const l = lines[i].trim();
-    if (l.startsWith('#base=')) {
-      const baseName = l.substring(6).trim();
-      baseFolder = path.join(clientlibFolder, baseName);
-    }
-  }
+  const baseFolder = getActiveBaseFolder(lines, lineIndex, clientlibFolder);
 
-  const assetPath = path.join(baseFolder, trimmed);
+  const assetPath = resolveInsideClientLib(
+    clientlibFolder,
+    path.relative(clientlibFolder, baseFolder) + path.sep + trimmed
+  );
+  if (!assetPath) {
+    return null;
+  }
   try {
     const stat = await fs.stat(assetPath);
     if (stat.isFile()) {
-      return `file://${assetPath}`;
+      return pathToFileURL(assetPath).toString();
     }
   } catch (err) {
     // File not found
