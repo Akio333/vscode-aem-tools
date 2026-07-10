@@ -6,6 +6,7 @@ import {
   ProposedFeatures,
   InitializeParams,
   DidChangeConfigurationNotification,
+  DidChangeWatchedFilesNotification,
   CompletionItem,
   CompletionItemKind,
   TextDocumentPositionParams,
@@ -41,6 +42,34 @@ const documents: TextDocuments<TextDocument> = new TextDocuments(TextDocument);
 let hasConfigurationCapability = false;
 let hasWorkspaceFolderCapability = false;
 let workspaceRoots: string[] = [];
+let osgiIndexRefresh: NodeJS.Timeout | undefined;
+let clientLibIndexRefresh: NodeJS.Timeout | undefined;
+
+function refreshOsgiIndex(): void {
+  if (osgiIndexRefresh) {
+    clearTimeout(osgiIndexRefresh);
+  }
+
+  osgiIndexRefresh = setTimeout(() => {
+    osgiIndexRefresh = undefined;
+    initializeOsgiIndex(workspaceRoots).catch(err => {
+      connection.console.error(`OSGi Index refresh error: ${err.message}`);
+    });
+  }, 150);
+}
+
+function refreshClientLibIndex(): void {
+  if (clientLibIndexRefresh) {
+    clearTimeout(clientLibIndexRefresh);
+  }
+
+  clientLibIndexRefresh = setTimeout(() => {
+    clientLibIndexRefresh = undefined;
+    initializeClientLibsIndex(workspaceRoots).catch(err => {
+      connection.console.error(`ClientLibs Index refresh error: ${err.message}`);
+    });
+  }, 150);
+}
 
 connection.onInitialize((params: InitializeParams) => {
   const capabilities = params.capabilities;
@@ -107,6 +136,28 @@ connection.onInitialized(() => {
         }
       });
     });
+  }
+});
+
+connection.onNotification(DidChangeWatchedFilesNotification.type, params => {
+  let shouldRefreshOsgi = false;
+  let shouldRefreshClientLibs = false;
+
+  for (const change of params.changes) {
+    const uri = change.uri.toLowerCase();
+    if (uri.includes('/osgi-inf/metatype/') && uri.endsWith('.xml')) {
+      shouldRefreshOsgi = true;
+    }
+    if (uri.endsWith('/.content.xml')) {
+      shouldRefreshClientLibs = true;
+    }
+  }
+
+  if (shouldRefreshOsgi) {
+    refreshOsgiIndex();
+  }
+  if (shouldRefreshClientLibs) {
+    refreshClientLibIndex();
   }
 });
 

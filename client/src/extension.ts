@@ -42,8 +42,7 @@ export function activate(context: ExtensionContext) {
     synchronize: {
       // Notify the server about changes to configurations, metatypes, and content definitions
       fileEvents: [
-        workspace.createFileSystemWatcher('**/.clientrc'),
-        workspace.createFileSystemWatcher('**/OSGI-INF/metatype/*.xml'),
+        workspace.createFileSystemWatcher('**/OSGI-INF/metatype/**/*.xml'),
         workspace.createFileSystemWatcher('**/.content.xml')
       ]
     }
@@ -182,4 +181,3 @@ export function deactivate(): Thenable<void> | undefined {
   }
   return client.stop();
 }
-
