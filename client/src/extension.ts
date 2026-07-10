@@ -76,28 +76,38 @@ export function activate(context: ExtensionContext) {
         window.showErrorMessage('No file selected to sync to AEM.');
         return;
       }
+      if (!getJcrPath(targetUri.fsPath)) {
+        window.showErrorMessage(`File is not located under a 'jcr_root' directory: ${path.basename(targetUri.fsPath)}`);
+        return;
+      }
 
       const config = workspace.getConfiguration('aemTools');
       const host = config.get<string>('host') || 'http://localhost:4502';
       const username = config.get<string>('username') || 'admin';
       const password = config.get<string>('password') || 'admin';
-      
-      let targetUrl = host;
-      if (targetUrl.includes('://')) {
-        const parts = targetUrl.split('://');
-        targetUrl = `${parts[0]}://${username}:${password}@${parts[1]}`;
-      } else {
-        targetUrl = `http://${username}:${password}@${targetUrl}`;
-      }
+      const targetUrl = new URL(host.includes('://') ? host : `http://${host}`).toString().replace(/\/$/, '');
 
       window.showInformationMessage(`Syncing ${path.basename(targetUri.fsPath)} to AEM...`);
       
-      // Load standard CommonJS aemsync module
       const aemsync = require('aemsync');
-      
       const pushGen = aemsync.push({
         payload: [targetUri.fsPath],
-        targets: [targetUrl]
+        targets: [targetUrl],
+        postHandler: async ({ archivePath, target, packmgrPath }: { archivePath: string; target: string; packmgrPath: string }) => {
+          const response = await httpClient.postMultipartFile(
+            `${target}${packmgrPath}`,
+            archivePath,
+            { force: 'true', install: 'true' },
+            username,
+            password
+          );
+          return {
+            target,
+            err: response.statusCode >= 200 && response.statusCode < 300
+              ? undefined
+              : new Error(`AEM package upload failed with status ${response.statusCode}.`)
+          };
+        }
       });
 
       for await (const result of pushGen) {
