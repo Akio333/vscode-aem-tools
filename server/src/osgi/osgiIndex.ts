@@ -9,7 +9,14 @@ export interface OsgiAttribute {
   type: string;
   defaultValue?: string;
   required: boolean;
+  cardinality: number;
+  options: OsgiOption[];
   description?: string;
+}
+
+export interface OsgiOption {
+  value: string;
+  label?: string;
 }
 
 export interface OsgiOcd {
@@ -50,6 +57,7 @@ async function findFiles(dir: string, pattern: RegExp): Promise<string[]> {
  */
 export function parseMetatypeXml(content: string) {
   let currentOcd: OsgiOcd | null = null;
+  let currentAttribute: OsgiAttribute | null = null;
   const localOcds = new Map<string, OsgiOcd>();
   const localDesignates: { pid?: string; factoryPid?: string; ocdref: string }[] = [];
 
@@ -71,14 +79,23 @@ export function parseMetatypeXml(content: string) {
       } else if (localName === 'AD' && currentOcd) {
         const id = attribs.id;
         if (id) {
-          currentOcd.attributes.set(id, {
+          currentAttribute = {
             id,
             name: attribs.name,
             type: attribs.type || 'String',
             defaultValue: attribs.default,
-            required: attribs.required === 'true',
+            // The OSGi Metatype default is true when the attribute is omitted.
+            required: attribs.required !== 'false',
+            cardinality: Number.parseInt(attribs.cardinality || '0', 10) || 0,
+            options: [],
             description: attribs.description
-          });
+          };
+          currentOcd.attributes.set(id, currentAttribute);
+        }
+      } else if (localName === 'Option' && currentAttribute) {
+        const value = attribs.value;
+        if (value !== undefined) {
+          currentAttribute.options.push({ value, label: attribs.label });
         }
       } else if (localName === 'Designate') {
         const pid = attribs.pid;
@@ -97,6 +114,9 @@ export function parseMetatypeXml(content: string) {
     },
     onclosetag(name) {
       const localName = name.split(':').pop() || '';
+      if (localName === 'AD') {
+        currentAttribute = null;
+      }
       if (localName === 'OCD') {
         currentOcd = null;
       }

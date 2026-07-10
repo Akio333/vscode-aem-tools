@@ -102,14 +102,13 @@ function validateCfgJson(
       continue;
     }
 
-    const value = json[key];
-    const typeError = checkValueType(value, attr.type);
-    if (typeError) {
+    const valueError = validateValue(json[key], attr);
+    if (valueError) {
       const range = findValueRange(document, text, key);
       diagnostics.push({
         severity: DiagnosticSeverity.Error,
         range,
-        message: `Type mismatch for "${key}". Expected OSGi ${attr.type}, got: ${typeError}`,
+        message: `Invalid value for "${key}". ${valueError}`,
         source: 'aem-tools-osgi'
       });
     }
@@ -215,7 +214,32 @@ function validateFelixConfig(
   }
 }
 
-function checkValueType(value: any, expectedType: string): string | null {
+function validateValue(value: unknown, attr: OsgiAttribute): string | null {
+  const values = Array.isArray(value) ? value : [value];
+
+  if (attr.cardinality === 0 && Array.isArray(value)) {
+    return 'This property accepts a single value, not an array.';
+  }
+  if (attr.cardinality > 0 && values.length > attr.cardinality) {
+    return `This property permits at most ${attr.cardinality} value(s).`;
+  }
+  if (attr.cardinality < 0 && values.length < Math.abs(attr.cardinality)) {
+    return `This property requires at least ${Math.abs(attr.cardinality)} value(s).`;
+  }
+
+  for (const item of values) {
+    const typeError = checkScalarValueType(item, attr.type);
+    if (typeError) {
+      return `Expected OSGi ${attr.type}, got ${typeError}.`;
+    }
+    if (attr.options.length > 0 && !attr.options.some(option => option.value === String(item))) {
+      return `Expected one of: ${attr.options.map(option => option.value).join(', ')}.`;
+    }
+  }
+  return null;
+}
+
+function checkScalarValueType(value: unknown, expectedType: string): string | null {
   const normType = expectedType.toLowerCase();
   
   if (normType === 'boolean') {
@@ -235,10 +259,6 @@ function checkValueType(value: any, expectedType: string): string | null {
       return `non-character value`;
     }
   } else {
-    // String or array check
-    if (Array.isArray(value)) {
-      return null; // Arrays are acceptable for multiple values
-    }
     if (typeof value !== 'string' && typeof value !== 'boolean' && typeof value !== 'number') {
       return `invalid type (${typeof value})`;
     }
