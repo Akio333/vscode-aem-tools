@@ -58,10 +58,22 @@ export function activate(context: ExtensionContext) {
 
   // Handle custom request from server
   client.onRequest('aem/findClassFile', async (params: { className: string }) => {
-    const files = await workspace.findFiles(`**/core/src/main/java/**/${params.className}.java`, '**/node_modules/**', 1);
-    if (files && files.length > 0) {
-      return files[0].toString();
+    const normalizedName = params.className.replace(/\$/g, '.');
+    const classPath = normalizedName.replace(/\./g, '/');
+    const exclude = '{**/node_modules/**,**/target/**,**/.git/**}';
+    const exactMatches = await workspace.findFiles(`**/src/main/java/**/${classPath}.java`, exclude, 1);
+    if (exactMatches.length > 0) {
+      return exactMatches[0].toString();
     }
+
+    // A simple Use class name is legal in some project conventions. Fall back
+    // to its filename without assuming a module such as `core`.
+    const simpleName = normalizedName.split('.').pop();
+    if (simpleName) {
+      const matches = await workspace.findFiles(`**/src/main/java/**/${simpleName}.java`, exclude, 1);
+      if (matches.length > 0) return matches[0].toString();
+    }
+
     return null;
   });
 
