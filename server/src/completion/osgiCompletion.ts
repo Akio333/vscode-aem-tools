@@ -3,6 +3,16 @@ import { TextDocument } from 'vscode-languageserver-textdocument';
 import { getOcdForPid, OsgiOcd, OsgiAttribute } from '../osgi/osgiIndex';
 import { getPidFromPath } from '../validation/osgiValidation';
 
+function getOptionCompletions(attr: OsgiAttribute, format: (value: string) => string): CompletionItem[] {
+  return attr.options.map(option => ({
+    label: option.label || option.value,
+    kind: CompletionItemKind.EnumMember,
+    detail: option.value,
+    documentation: option.label ? `OSGi option: ${option.label}` : undefined,
+    insertText: format(option.value)
+  }));
+}
+
 export function getOsgiCompletions(
   document: TextDocument,
   position: Position
@@ -35,6 +45,9 @@ export function getOsgiCompletions(
       if (keyMatch) {
         const key = keyMatch[1];
         const attr = ocd.attributes.get(key);
+        if (attr?.options.length) {
+          return getOptionCompletions(attr, value => attr.type.toLowerCase() === 'boolean' ? value : JSON.stringify(value));
+        }
         if (attr && attr.type.toLowerCase() === 'boolean') {
           return [
             { label: 'true', kind: CompletionItemKind.Value },
@@ -89,6 +102,14 @@ export function getOsgiCompletions(
         const attr = ocd.attributes.get(key);
         if (attr) {
           const type = attr.type.toLowerCase();
+          if (attr.options.length) {
+            return getOptionCompletions(attr, value => {
+              if (type === 'boolean') return `B"${value}"`;
+              if (['integer', 'long', 'short', 'byte'].includes(type)) return `I"${value}"`;
+              if (['double', 'float'].includes(type)) return `D"${value}"`;
+              return `"${value}"`;
+            });
+          }
           if (type === 'boolean') {
             return [
               { label: 'B"true"', kind: CompletionItemKind.Value, documentation: 'Boolean True' },
