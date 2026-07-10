@@ -1,5 +1,5 @@
 import * as path from 'path';
-import { workspace, ExtensionContext, commands, window } from 'vscode';
+import { workspace, ConfigurationTarget, ExtensionContext, commands, FileType, Uri, window } from 'vscode';
 import {
   LanguageClient,
   LanguageClientOptions,
@@ -10,6 +10,14 @@ import { getJcrPath } from './utils/jcrUtils';
 import * as httpClient from './utils/httpClient';
 
 let client: LanguageClient;
+
+const AUTO_SYNC_DEBOUNCE_MS = 750;
+
+function isUiAppsJcrRootFile(uri: Uri): boolean {
+  const segments = uri.fsPath.replace(/\\/g, '/').split('/').filter(Boolean);
+  const uiAppsIndex = segments.lastIndexOf('ui.apps');
+  return uiAppsIndex !== -1 && segments.slice(uiAppsIndex + 1).includes('jcr_root');
+}
 
 export function activate(context: ExtensionContext) {
   // The server is implemented in node
@@ -80,16 +88,12 @@ export function activate(context: ExtensionContext) {
   // Start the client. This will also launch the server
   client.start();
 
-  // Register AEM sync commands
-  const syncToAemCmd = commands.registerCommand('aem-tools.syncToAEM', async (uri) => {
+  const syncToAem = async (targetUri: Uri, automatic = false): Promise<void> => {
     try {
-      const targetUri = uri || window.activeTextEditor?.document.uri;
-      if (!targetUri) {
-        window.showErrorMessage('No file selected to sync to AEM.');
-        return;
-      }
       if (!getJcrPath(targetUri.fsPath)) {
-        window.showErrorMessage(`File is not located under a 'jcr_root' directory: ${path.basename(targetUri.fsPath)}`);
+        if (!automatic) {
+          window.showErrorMessage(`File is not located under a 'jcr_root' directory: ${path.basename(targetUri.fsPath)}`);
+        }
         return;
       }
 
@@ -99,7 +103,9 @@ export function activate(context: ExtensionContext) {
       const password = config.get<string>('password') || 'admin';
       const targetUrl = new URL(host.includes('://') ? host : `http://${host}`).toString().replace(/\/$/, '');
 
-      window.showInformationMessage(`Syncing ${path.basename(targetUri.fsPath)} to AEM...`);
+      if (!automatic) {
+        window.showInformationMessage(`Syncing ${path.basename(targetUri.fsPath)} to AEM...`);
+      }
       
       const aemsync = require('aemsync');
       const pushGen = aemsync.push({
@@ -126,12 +132,63 @@ export function activate(context: ExtensionContext) {
         if (result.response?.err) {
           window.showErrorMessage(`AEM Sync Error: ${result.response.err.message}`);
         } else {
-          window.showInformationMessage(`Successfully synced ${path.basename(targetUri.fsPath)} to AEM.`);
+          const message = `Synced ${path.basename(targetUri.fsPath)} to AEM.`;
+          if (automatic) {
+            window.setStatusBarMessage(`AEM FE Dev Mode: ${message}`, 3000);
+          } else {
+            window.showInformationMessage(`Successfully ${message.toLowerCase()}`);
+          }
         }
       }
     } catch (err: any) {
       window.showErrorMessage(`AEM Sync failed: ${err.message}`);
     }
+  };
+
+  // Register AEM sync commands
+  const syncToAemCmd = commands.registerCommand('aem-tools.syncToAEM', async (uri) => {
+    const targetUri = uri || window.activeTextEditor?.document.uri;
+    if (!targetUri) {
+      window.showErrorMessage('No file selected to sync to AEM.');
+      return;
+    }
+    await syncToAem(targetUri);
+  });
+
+  const autoSyncTimers = new Map<string, NodeJS.Timeout>();
+  const scheduleAutoSync = async (uri: Uri) => {
+    if (!workspace.getConfiguration('aemTools').get<boolean>('feDevMode', false) || !isUiAppsJcrRootFile(uri)) {
+      return;
+    }
+
+    try {
+      const stat = await workspace.fs.stat(uri);
+      if ((stat.type & FileType.File) === 0) {
+        return;
+      }
+    } catch {
+      return;
+    }
+
+    const key = uri.toString();
+    const previous = autoSyncTimers.get(key);
+    if (previous) {
+      clearTimeout(previous);
+    }
+    autoSyncTimers.set(key, setTimeout(() => {
+      autoSyncTimers.delete(key);
+      void syncToAem(uri, true);
+    }, AUTO_SYNC_DEBOUNCE_MS));
+  };
+
+  const feDevModeWatcher = workspace.createFileSystemWatcher('**/ui.apps/**/jcr_root/**/*');
+  const autoSyncChanged = feDevModeWatcher.onDidChange(uri => { void scheduleAutoSync(uri); });
+  const autoSyncCreated = feDevModeWatcher.onDidCreate(uri => { void scheduleAutoSync(uri); });
+  const toggleFeDevModeCmd = commands.registerCommand('aem-tools.toggleFeDevMode', async () => {
+    const config = workspace.getConfiguration('aemTools');
+    const enabled = !config.get<boolean>('feDevMode', false);
+    await config.update('feDevMode', enabled, ConfigurationTarget.Workspace);
+    window.showInformationMessage(`AEM FE Dev Mode ${enabled ? 'enabled' : 'disabled'}.`);
   });
   
   const syncFromAemCmd = commands.registerCommand('aem-tools.syncFromAEM', async (uri) => {
@@ -194,7 +251,16 @@ export function activate(context: ExtensionContext) {
     }
   });
 
-  context.subscriptions.push(syncToAemCmd, syncFromAemCmd, testConnectionCmd);
+  context.subscriptions.push(
+    syncToAemCmd,
+    syncFromAemCmd,
+    testConnectionCmd,
+    feDevModeWatcher,
+    autoSyncChanged,
+    autoSyncCreated,
+    toggleFeDevModeCmd,
+    { dispose: () => autoSyncTimers.forEach(timer => clearTimeout(timer)) }
+  );
 }
 
 export function deactivate(): Thenable<void> | undefined {
