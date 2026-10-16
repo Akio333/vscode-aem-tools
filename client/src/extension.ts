@@ -6,7 +6,7 @@ import {
   ServerOptions,
   TransportKind
 } from 'vscode-languageclient/node';
-import { getJcrPath } from './utils/jcrUtils';
+import { getJcrPath, normalizeHost, unescapeJcrPath } from './utils/jcrUtils';
 import * as httpClient from './utils/httpClient';
 
 let client: LanguageClient;
@@ -101,7 +101,7 @@ export function activate(context: ExtensionContext) {
       const host = config.get<string>('host') || 'http://localhost:4502';
       const username = config.get<string>('username') || 'admin';
       const password = config.get<string>('password') || 'admin';
-      const targetUrl = new URL(host.includes('://') ? host : `http://${host}`).toString().replace(/\/$/, '');
+      const targetUrl = normalizeHost(host);
 
       if (!automatic) {
         window.showInformationMessage(`Syncing ${path.basename(targetUri.fsPath)} to AEM...`);
@@ -212,7 +212,8 @@ export function activate(context: ExtensionContext) {
 
       window.showInformationMessage(`Syncing ${path.basename(targetUri.fsPath)} from AEM...`);
 
-      const targetUrl = `${host}${jcrPath}`;
+      const repositoryPath = unescapeJcrPath(jcrPath).split('/').map(encodeURIComponent).join('/');
+      const targetUrl = `${normalizeHost(host)}${repositoryPath}`;
       const res = await httpClient.get(targetUrl, username, password);
 
       if (res.statusCode === 200) {
@@ -236,7 +237,7 @@ export function activate(context: ExtensionContext) {
 
     try {
       // Packmgr service JSP endpoint requires authentication and responds with 200/500 depending on credentials
-      const testUrl = `${host}/crx/packmgr/service.jsp?cmd=help`;
+      const testUrl = `${normalizeHost(host)}/crx/packmgr/service.jsp?cmd=help`;
       const res = await httpClient.get(testUrl, username, password);
       
       if (res.statusCode === 200) {

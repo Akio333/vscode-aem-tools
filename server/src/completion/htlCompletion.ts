@@ -528,10 +528,12 @@ export async function parseJavaGetters(javaFilePath: string): Promise<string[]> 
     const content = await fs.readFile(localPath, 'utf-8');
     const properties: string[] = [];
     
-    const regex = /(?:public\s+)?(?:[a-zA-Z0-9_<>\?\[\]]+\s+)?(get|is)([A-Z][a-zA-Z0-9_]*)\s*\(\s*\)\s*(?:\{|;|\n)/g;
+    // A getter declaration: optional modifiers, a return type, then get/isXxx().
+    // Anchoring on the declaration keeps calls such as `return getFoo();` or
+    // `request.getBar();` in method bodies out of the results.
+    const regex = /^[ \t]*(?:public\s+|protected\s+)?(?:(?:default|final|abstract|synchronized)\s+)*(?!return\b|else\b|new\b|throw\b)[\w.]+(?:<[^\n(]*>)?(?:\[\])*\s+(get|is)([A-Z]\w*)\s*\(\s*\)/gm;
     let match;
     while ((match = regex.exec(content)) !== null) {
-      const prefix = match[1];
       const name = match[2];
       const propName = name.charAt(0).toLowerCase() + name.slice(1);
       

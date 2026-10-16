@@ -12,6 +12,8 @@ export interface XmlPositionContext {
   tagName?: string;
   attrName?: string;
   attrValuePrefix?: string;
+  /** True when the cursor is inside an opening quote of the attribute value. */
+  attrValueQuoted?: boolean;
 }
 
 /**
@@ -90,7 +92,8 @@ export function getXmlPositionContext(text: string, offset: number): XmlPosition
       mode: 'ATTR_VALUE',
       tagName: currentTagName,
       attrName: currentAttrName,
-      attrValuePrefix: currentAttrValue
+      attrValuePrefix: currentAttrValue,
+      attrValueQuoted: quoteChar === '"' || quoteChar === "'"
     };
   }
 }
@@ -520,9 +523,31 @@ const REFRESH_VALUES = [
 ];
 
 /**
+ * Value items are declared with or without surrounding quotes. Make them match
+ * the cursor: bare inside an already opened (usually auto-closed) quote, and
+ * quoted when the value starts right after the `=`.
+ */
+function fitValueItems(items: CompletionItem[], quoted: boolean): CompletionItem[] {
+  return items.map(item => {
+    const bare = item.label.replace(/^"(.*)"$/, '$1');
+    const text = quoted ? bare : `"${bare}"`;
+    return { ...item, label: text, insertText: text, filterText: bare };
+  });
+}
+
+/**
  * Handle autocomplete completions for JCR XML configurations.
  */
 export function getJcrXmlCompletions(
+  document: TextDocument,
+  position: Position
+): CompletionItem[] {
+  const context = getXmlPositionContext(document.getText(), document.offsetAt(position));
+  const items = getJcrXmlCompletionItems(document, position);
+  return context.mode === 'ATTR_VALUE' ? fitValueItems(items, !!context.attrValueQuoted) : items;
+}
+
+function getJcrXmlCompletionItems(
   document: TextDocument,
   position: Position
 ): CompletionItem[] {

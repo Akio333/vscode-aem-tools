@@ -25,6 +25,7 @@ AEM Tools can be configured in your VS Code workspace settings:
 | `aemTools.host` | `string` | `http://localhost:4502` | The URL of the target AEM instance. |
 | `aemTools.username` | `string` | `admin` | AEM Username. |
 | `aemTools.password` | `string` | `admin` | AEM Password. |
+| `aemTools.feDevMode` | `boolean` | `false` | Automatically sync changed files under `ui.apps/**/jcr_root` to AEM. |
 
 ---
 
@@ -34,6 +35,7 @@ Access the following commands via the context menu (right-click on a file) or th
 
 *   **AEM: Sync to Server** (`aem-tools.syncToAEM`): Pushes the selected file/folder under `jcr_root` to AEM.
 *   **AEM: Sync from Server** (`aem-tools.syncFromAEM`): Pulls the selected file's content from AEM JCR to the workspace.
+*   **AEM: Toggle FE Dev Mode** (`aem-tools.toggleFeDevMode`): Enables or disables automatic sync of changed `ui.apps` files.
 *   **AEM: Test Connection** (`aem-tools.testConnection`): Tests connectivity and credentials with the AEM instance.
 
 ---

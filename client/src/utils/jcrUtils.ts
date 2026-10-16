@@ -27,3 +27,27 @@ export function getJcrPath(filePath: string): string | null {
   
   return null;
 }
+
+const FILEVAULT_NAMESPACES = ['jcr', 'cq', 'sling', 'nt', 'mix', 'rep', 'oak', 'dam', 'granite', 'crx'];
+
+/**
+ * FileVault stores names with a namespace prefix as `_prefix_name` because
+ * `:` is not a valid file name character on every platform
+ * (e.g. `_jcr_content` is `jcr:content`). Convert such segments back.
+ */
+export function unescapeJcrPath(jcrPath: string): string {
+  return jcrPath
+    .split('/')
+    .map(segment => {
+      const match = /^_([a-z]+)_(.+)$/.exec(segment);
+      return match && FILEVAULT_NAMESPACES.includes(match[1]) ? `${match[1]}:${match[2]}` : segment;
+    })
+    .join('/');
+}
+
+/**
+ * Normalises the configured AEM host into a base URL without a trailing slash.
+ */
+export function normalizeHost(host: string): string {
+  return new URL(host.includes('://') ? host : `http://${host}`).toString().replace(/\/+$/, '');
+}

@@ -43,7 +43,11 @@ async function findFiles(dir: string, pattern: RegExp): Promise<string[]> {
   return results;
 }
 
-export async function scanClientLibFile(filePath: string) {
+export async function scanClientLibFile(
+  filePath: string,
+  targetLibs: Map<string, ClientLib> = clientLibsCache,
+  targetCategories: Map<string, ClientLib> = categoryMap
+) {
   try {
     const content = await fs.readFile(filePath, 'utf-8');
     let isClientLib = false;
@@ -78,9 +82,9 @@ export async function scanClientLibFile(filePath: string) {
         allowProxy,
         folderPath
       };
-      clientLibsCache.set(folderPath, cl);
+      targetLibs.set(folderPath, cl);
       for (const cat of categories) {
-        categoryMap.set(cat, cl);
+        targetCategories.set(cat, cl);
       }
     }
   } catch (err) {
@@ -88,22 +92,38 @@ export async function scanClientLibFile(filePath: string) {
   }
 }
 
+let indexGeneration = 0;
+
 /**
- * Scan workspace for ClientLibraries.
+ * Scan workspace for ClientLibraries. The new index is built on the side and
+ * swapped in at the end so lookups never see a half-built index, and a scan
+ * superseded by a newer one is discarded.
  */
 export async function initializeClientLibsIndex(workspaceRoots: string[]) {
-  clientLibsCache.clear();
-  categoryMap.clear();
+  const generation = ++indexGeneration;
+  const nextLibs = new Map<string, ClientLib>();
+  const nextCategories = new Map<string, ClientLib>();
 
   for (let root of workspaceRoots) {
     if (root.startsWith('file://')) {
       root = fileURLToPath(root);
     }
-    const contentXmlFiles = await findFiles(root, /\.content\.xml$/);
+    const contentXmlFiles = await findFiles(root, /^\.content\.xml$/);
     for (const filePath of contentXmlFiles) {
-      await scanClientLibFile(filePath);
+      await scanClientLibFile(filePath, nextLibs, nextCategories);
+    }
+    if (generation !== indexGeneration) {
+      return;
     }
   }
+
+  if (generation !== indexGeneration) {
+    return;
+  }
+  clientLibsCache.clear();
+  categoryMap.clear();
+  nextLibs.forEach((lib, folder) => clientLibsCache.set(folder, lib));
+  nextCategories.forEach((lib, category) => categoryMap.set(category, lib));
 }
 
 export function getAllClientLibs(): ClientLib[] {

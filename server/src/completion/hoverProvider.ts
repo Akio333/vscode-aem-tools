@@ -17,6 +17,17 @@ import { getPidFromPath } from '../validation/osgiValidation';
 import { getClientLibByCategory } from '../clientlibs/clientlibIndex';
 
 /**
+ * Repository path of a folder below `jcr_root`; falls back to the file system
+ * path when the folder is not inside one.
+ */
+function getRepositoryPath(folderPath: string): string {
+  const normalized = folderPath.replace(/\\/g, '/');
+  const marker = '/jcr_root/';
+  const idx = normalized.lastIndexOf(marker);
+  return idx === -1 ? normalized : normalized.substring(idx + marker.length - 1);
+}
+
+/**
  * Helper to extract word under cursor
  */
 function getWordAtOffset(text: string, offset: number): string {
@@ -160,7 +171,7 @@ export async function getHoverSupport(
       if (cl) {
         const markdown = [
           `**AEM Client Library:** \`${cleanWord}\``,
-          `**Path:** \`${cl.folderPath.substring(cl.folderPath.indexOf('/jcr_root') + 9)}\``,
+          `**Path:** \`${getRepositoryPath(cl.folderPath)}\``,
           cl.dependencies.length > 0 ? `**Dependencies:** ${cl.dependencies.join(', ')}` : '',
           cl.embed.length > 0 ? `**Embed:** ${cl.embed.join(', ')}` : '',
           `**Proxy Enabled:** \`${cl.allowProxy}\``

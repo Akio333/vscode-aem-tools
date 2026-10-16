@@ -9,6 +9,7 @@ import {
   DidChangeWatchedFilesNotification,
   CompletionItem,
   CompletionItemKind,
+  Range,
   TextDocumentPositionParams,
   TextDocumentSyncKind,
   InitializeResult
@@ -32,6 +33,22 @@ import { getHoverSupport } from './completion/hoverProvider';
 import { getDefinitionSupport } from './completion/definitionProvider';
 
 const Compiler = require('@adobe/htlengine/src/compiler/Compiler.js');
+const HTLParser = require('@adobe/htlengine/src/parser/htl/HTLParser.js');
+
+// The HTL grammar reports token positions relative to the expression being
+// parsed, not the document. Remember which source text failed so the error
+// can be mapped back to a document range.
+const originalHtlParse = HTLParser.prototype.parse;
+HTLParser.prototype.parse = function (this: unknown, text: string, location?: { line: number; column: number }) {
+  try {
+    return originalHtlParse.call(this, text, location);
+  } catch (err: any) {
+    if (err && typeof err === 'object') {
+      err.htlSource = { text, line: location?.line ?? 0 };
+    }
+    throw err;
+  }
+};
 
 // Create a connection for the server, using Node's IPC as a transport.
 const connection = createConnection(ProposedFeatures.all);
@@ -45,6 +62,28 @@ let workspaceRoots: string[] = [];
 let osgiIndexRefresh: NodeJS.Timeout | undefined;
 let clientLibIndexRefresh: NodeJS.Timeout | undefined;
 
+function isOsgiConfigUri(uri: string): boolean {
+  return uri.endsWith('.cfg.json') || uri.endsWith('.config');
+}
+
+/**
+ * OSGi diagnostics depend on the metatype index, which is built after the
+ * documents may already be open, so validate them again once it changes.
+ */
+function revalidateOsgiDocuments(): void {
+  for (const document of documents.all()) {
+    if (isOsgiConfigUri(document.uri)) {
+      void validateTextDocument(document);
+    }
+  }
+}
+
+function rebuildOsgiIndex(errorLabel: string): void {
+  initializeOsgiIndex(workspaceRoots).then(revalidateOsgiDocuments).catch(err => {
+    connection.console.error(`${errorLabel}: ${err.message}`);
+  });
+}
+
 function refreshOsgiIndex(): void {
   if (osgiIndexRefresh) {
     clearTimeout(osgiIndexRefresh);
@@ -52,9 +91,7 @@ function refreshOsgiIndex(): void {
 
   osgiIndexRefresh = setTimeout(() => {
     osgiIndexRefresh = undefined;
-    initializeOsgiIndex(workspaceRoots).catch(err => {
-      connection.console.error(`OSGi Index refresh error: ${err.message}`);
-    });
+    rebuildOsgiIndex('OSGi Index refresh error');
   }, 150);
 }
 
@@ -111,9 +148,7 @@ connection.onInitialize((params: InitializeParams) => {
 
 connection.onInitialized(() => {
   // Execute indexers asynchronously
-  initializeOsgiIndex(workspaceRoots).catch(err => {
-    connection.console.error(`OSGi Index error: ${err.message}`);
-  });
+  rebuildOsgiIndex('OSGi Index error');
   initializeClientLibsIndex(workspaceRoots).catch(err => {
     connection.console.error(`ClientLibs Index error: ${err.message}`);
   });
@@ -127,9 +162,7 @@ connection.onInitialized(() => {
       connection.workspace.getWorkspaceFolders().then(folders => {
         if (folders) {
           workspaceRoots = folders.map(f => f.uri);
-          initializeOsgiIndex(workspaceRoots).catch(err => {
-            connection.console.error(`OSGi Index error: ${err.message}`);
-          });
+          rebuildOsgiIndex('OSGi Index error');
           initializeClientLibsIndex(workspaceRoots).catch(err => {
             connection.console.error(`ClientLibs Index error: ${err.message}`);
           });
@@ -190,9 +223,39 @@ documents.onDidClose(event => {
   connection.sendDiagnostics({ uri, diagnostics: [] });
 });
 
+/**
+ * Maps a token reported by the HTL parser to a range in the document. The
+ * token offset is relative to the failing expression, so locate that
+ * expression starting at the line the HTL engine reported.
+ */
+function getHtlErrorRange(textDocument: TextDocument, err: any): Range | null {
+  const source = err.htlSource as { text: string; line: number } | undefined;
+  if (!source || !err.token) {
+    return null;
+  }
+
+  const text = textDocument.getText();
+  const lineStart = textDocument.offsetAt({ line: Math.max(source.line, 0), character: 0 });
+  let base = text.indexOf(source.text, lineStart);
+  if (base === -1) {
+    base = text.indexOf(source.text);
+  }
+  if (base === -1) {
+    return null;
+  }
+
+  const tokenOffset = Math.min(Math.max(err.token.offset ?? 0, 0), source.text.length);
+  const tokenLength = Math.max(String(err.token.value ?? '').length, 1);
+  return {
+    start: textDocument.positionAt(base + tokenOffset),
+    end: textDocument.positionAt(base + tokenOffset + tokenLength)
+  };
+}
+
 async function validateTextDocument(textDocument: TextDocument): Promise<void> {
   const uri = textDocument.uri;
-  if (uri.endsWith('.cfg.json') || uri.endsWith('.config')) {
+  const version = textDocument.version;
+  if (isOsgiConfigUri(uri)) {
     const diagnostics = validateOsgiConfig(textDocument);
     connection.sendDiagnostics({ uri, diagnostics });
     return;
@@ -214,7 +277,7 @@ async function validateTextDocument(textDocument: TextDocument): Promise<void> {
         const closeBraces = (value.match(/\}/g) || []).length;
         
         if (openBraces !== closeBraces) {
-          const index = text.indexOf(value);
+          const index = text.indexOf(value, parser.startIndex);
           if (index !== -1) {
             const diagnostic: Diagnostic = {
               severity: DiagnosticSeverity.Warning,
@@ -272,28 +335,17 @@ async function validateTextDocument(textDocument: TextDocument): Promise<void> {
 
     await compiler.compileToString(text);
   } catch (err: any) {
-    if (err && err.token) {
-      // The error contains detailed token locations (1-indexed)
-      const line = (err.token.line || 1) - 1;
-      const col = (err.token.col || 1) - 1;
-      
-      // Calculate token length or default to 1 character
-      const tokenVal = err.token.value || '';
-      const length = tokenVal.length || 1;
-
-      const diagnostic: Diagnostic = {
+    const range = getHtlErrorRange(textDocument, err);
+    if (range) {
+      diagnostics.push({
         severity: DiagnosticSeverity.Error,
-        range: {
-          start: { line: line, character: col },
-          end: { line: line, character: col + length }
-        },
+        range,
         message: err.message || 'HTL compilation error',
         source: 'aem-tools-compiler'
-      };
-      diagnostics.push(diagnostic);
+      });
     } else if (err && err.message) {
       // General error without token location info
-      const diagnostic: Diagnostic = {
+      diagnostics.push({
         severity: DiagnosticSeverity.Error,
         range: {
           start: { line: 0, character: 0 },
@@ -301,9 +353,15 @@ async function validateTextDocument(textDocument: TextDocument): Promise<void> {
         },
         message: err.message,
         source: 'aem-tools-compiler'
-      };
-      diagnostics.push(diagnostic);
+      });
     }
+  }
+
+  // The compile is asynchronous: drop the result if the document was closed or
+  // edited in the meantime so stale diagnostics never replace newer ones.
+  const current = documents.get(uri);
+  if (!current || current.version !== version) {
+    return;
   }
 
   connection.sendDiagnostics({ uri: textDocument.uri, diagnostics });

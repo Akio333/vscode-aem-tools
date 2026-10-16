@@ -63,7 +63,8 @@ export async function getClientLibTxtCompletions(
   }
 
   const isJsTxt = filePath.endsWith('js.txt');
-  const targetExtension = isJsTxt ? '.js' : '.css';
+  // AEM compiles LESS sources listed in css.txt, so offer them as well.
+  const targetExtensions = isJsTxt ? ['.js'] : ['.css', '.less'];
 
   const completions: CompletionItem[] = [];
 
@@ -78,7 +79,7 @@ export async function getClientLibTxtCompletions(
       }
       
       const isDirectory = entry.isDirectory();
-      const isTargetFile = entry.isFile() && entry.name.endsWith(targetExtension);
+      const isTargetFile = entry.isFile() && targetExtensions.some(ext => entry.name.endsWith(ext));
 
       if (isDirectory) {
         completions.push({
@@ -91,7 +92,7 @@ export async function getClientLibTxtCompletions(
         completions.push({
           label: entry.name,
           kind: CompletionItemKind.File,
-          detail: isJsTxt ? 'JavaScript Source' : 'CSS Source'
+          detail: isJsTxt ? 'JavaScript Source' : entry.name.endsWith('.less') ? 'LESS Source' : 'CSS Source'
         });
       }
     }
