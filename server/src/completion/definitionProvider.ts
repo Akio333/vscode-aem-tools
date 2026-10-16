@@ -1,17 +1,40 @@
 import { Location, Position, Range } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
-import { fileURLToPath } from 'url';
+import { fileURLToPath, pathToFileURL } from 'url';
 import * as path from 'path';
 import * as fs from 'fs/promises';
 
 import { resolveClientLibAssetPath } from './clientlibTxtCompletion';
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Resolves an HTL include/use path. Absolute paths are relative to the
+ * `jcr_root` directory that contains the current file.
+ */
+function resolveHtlPath(currentDir: string, value: string): string {
+  if (value.startsWith('/')) {
+    const normalizedDir = currentDir.replace(/\\/g, '/');
+    const marker = '/jcr_root';
+    const rootIdx = normalizedDir.lastIndexOf(`${marker}/`);
+    const rootEnd = rootIdx !== -1
+      ? rootIdx + marker.length
+      : normalizedDir.endsWith(marker) ? normalizedDir.length : -1;
+    if (rootEnd !== -1) {
+      return path.join(normalizedDir.substring(0, rootEnd), value);
+    }
+  }
+  return path.join(currentDir, value);
+}
 
 /**
  * Parses current file to find the template file path for a Use variable
  */
 function findTemplatePathForVar(text: string, varName: string): string | null {
   // Regex: data-sly-use.varName="path.html"
-  const regex = new RegExp(`data-sly-use\\.${varName}\\s*=\\s*["']([^"']+)["']`, 'i');
+  const regex = new RegExp(`data-sly-use\\.${escapeRegExp(varName)}\\s*=\\s*["']([^"']+)["']`, 'i');
   const match = text.match(regex);
   return match ? match[1] : null;
 }
@@ -26,14 +49,14 @@ async function findTemplateDefinitionLocation(
   try {
     const text = await fs.readFile(filePath, 'utf-8');
     const lines = text.split(/\r?\n/);
-    const regex = new RegExp(`data-sly-template\\.${templateName}\\b`);
+    const regex = new RegExp(`data-sly-template\\.${escapeRegExp(templateName)}\\b`);
 
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
       const match = line.match(regex);
       if (match && match.index !== undefined) {
         return {
-          uri: `file://${filePath}`,
+          uri: pathToFileURL(filePath).toString(),
           range: Range.create(i, match.index, i, match.index + match[0].length)
         };
       }
@@ -83,24 +106,12 @@ export async function getDefinitionSupport(
     if (quoteBeforeMatch && quoteAfterMatch) {
       const value = quoteBeforeMatch[1] + quoteAfterMatch[1];
       if (value.endsWith('.html') || value.endsWith('.htl')) {
-        let targetPath = '';
-        if (value.startsWith('/')) {
-          // Absolute path from workspace apps. Let's find apps folder in absolute path
-          const appsIdx = currentDir.indexOf('/jcr_root/');
-          if (appsIdx !== -1) {
-            const jcrRoot = currentDir.substring(0, appsIdx + 9);
-            targetPath = path.join(jcrRoot, value);
-          } else {
-            targetPath = path.join(currentDir, value);
-          }
-        } else {
-          targetPath = path.join(currentDir, value);
-        }
+        const targetPath = resolveHtlPath(currentDir, value);
 
         try {
           await fs.stat(targetPath);
           return {
-            uri: `file://${targetPath}`,
+            uri: pathToFileURL(targetPath).toString(),
             range: Range.create(0, 0, 0, 0)
           };
         } catch (err) {
@@ -128,7 +139,7 @@ export async function getDefinitionSupport(
 
           const templateRelPath = findTemplatePathForVar(text, varName);
           if (templateRelPath) {
-            const templateFullPath = path.join(currentDir, templateRelPath);
+            const templateFullPath = resolveHtlPath(currentDir, templateRelPath);
             const loc = await findTemplateDefinitionLocation(templateFullPath, templateName);
             if (loc) return loc;
           }

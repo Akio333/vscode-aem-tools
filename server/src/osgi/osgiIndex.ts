@@ -55,7 +55,11 @@ async function findFiles(dir: string, pattern: RegExp): Promise<string[]> {
 /**
  * Parses a single OSGi metatype XML file content and populates the index.
  */
-export function parseMetatypeXml(content: string) {
+export function parseMetatypeXml(
+  content: string,
+  targetIndex: Map<string, OsgiOcd> = ocdIndex,
+  targetOcds: Map<string, OsgiOcd> = ocdMap
+) {
   let currentOcd: OsgiOcd | null = null;
   let currentAttribute: OsgiAttribute | null = null;
   const localOcds = new Map<string, OsgiOcd>();
@@ -128,29 +132,34 @@ export function parseMetatypeXml(content: string) {
 
   // Merge into main maps
   for (const [id, ocd] of localOcds.entries()) {
-    ocdMap.set(id, ocd);
-    ocdIndex.set(id, ocd); // Default mapping: OCD ID as PID fallback
+    targetOcds.set(id, ocd);
+    targetIndex.set(id, ocd); // Default mapping: OCD ID as PID fallback
   }
 
   for (const des of localDesignates) {
-    const targetOcd = ocdMap.get(des.ocdref);
+    const targetOcd = targetOcds.get(des.ocdref);
     if (targetOcd) {
       if (des.pid) {
-        ocdIndex.set(des.pid, targetOcd);
+        targetIndex.set(des.pid, targetOcd);
       }
       if (des.factoryPid) {
-        ocdIndex.set(des.factoryPid, targetOcd);
+        targetIndex.set(des.factoryPid, targetOcd);
       }
     }
   }
 }
 
+let indexGeneration = 0;
+
 /**
- * Scan workspace for OSGi metatypes.
+ * Scan workspace for OSGi metatypes. The new index is built on the side and
+ * swapped in at the end so lookups never see a half-built index, and a scan
+ * superseded by a newer one is discarded.
  */
 export async function initializeOsgiIndex(workspaceRoots: string[]) {
-  ocdIndex.clear();
-  ocdMap.clear();
+  const generation = ++indexGeneration;
+  const nextIndex = new Map<string, OsgiOcd>();
+  const nextOcds = new Map<string, OsgiOcd>();
 
   for (let root of workspaceRoots) {
     if (root.startsWith('file://')) {
@@ -158,16 +167,28 @@ export async function initializeOsgiIndex(workspaceRoots: string[]) {
     }
     const metatypeFiles = await findFiles(root, /\.xml$/);
     for (const filePath of metatypeFiles) {
-      if (filePath.includes('OSGI-INF/metatype')) {
+      // Normalise separators so the check also matches on Windows.
+      if (filePath.replace(/\\/g, '/').includes('OSGI-INF/metatype')) {
         try {
           const content = await fs.readFile(filePath, 'utf-8');
-          parseMetatypeXml(content);
+          parseMetatypeXml(content, nextIndex, nextOcds);
         } catch (err) {
           // Ignore parse errors
         }
       }
     }
+    if (generation !== indexGeneration) {
+      return;
+    }
   }
+
+  if (generation !== indexGeneration) {
+    return;
+  }
+  ocdIndex.clear();
+  ocdMap.clear();
+  nextIndex.forEach((ocd, pid) => ocdIndex.set(pid, ocd));
+  nextOcds.forEach((ocd, id) => ocdMap.set(id, ocd));
 }
 
 /**
