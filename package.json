@@ -141,10 +141,13 @@
   },
   "dependencies": {
     "@adobe/htlengine": "^6.4.39",
-    "aemsync": "^5.2.3",
+    "aemsync": "5.2.4",
     "htmlparser2": "^12.0.0",
     "vscode-languageclient": "^8.1.0",
     "vscode-languageserver": "^8.1.0",
     "vscode-languageserver-textdocument": "^1.0.8"
+  },
+  "overrides": {
+    "adm-zip": "^0.6.1"
   }
 }
